@@ -8,6 +8,7 @@ if k8s_context() != 'kind-ride-sharing':
 
 GATEWAY_API_VERSION = 'v1.6.1'  # the version Traefik's chart documents
 TRAEFIK_CHART_VERSION = '41.7.1'
+CNPG_CHART_VERSION = '0.29.1'  # CloudNativePG operator 1.30.1
 
 
 # Platform: Gateway API, Traefik and the public Gateway.
@@ -87,9 +88,52 @@ observability_chart('loki', 'grafana-community/loki', '18.15.1', 'grafana-commun
 observability_chart('grafana', 'grafana-community/grafana', '13.5.0', 'grafana-community-repo', links=['https://grafana.ride-sharing.localhost'])
 
 
+# Data: the CloudNativePG operator, which runs the Postgres clusters declared as
+# Kubernetes resources. Every chart default fits, so there's no values file.
+
+helm_repo('cnpg', 'https://cloudnative-pg.github.io/charts', resource_name='cnpg-repo', labels=['data'])
+helm_resource(
+    'cnpg',
+    'cnpg/cloudnative-pg',
+    namespace='cnpg-system',
+    flags=['--version', CNPG_CHART_VERSION, '--create-namespace'],
+    resource_deps=['cnpg-repo'],
+    labels=['data'],
+)
+
+# Tilt doesn't know that a Cluster runs pods. This makes each Cluster its own Tilt
+# resource, ready only once its Postgres pods are.
+k8s_kind('Cluster', api_version='postgresql.cnpg.io/v1', pod_readiness='wait')
+k8s_yaml(kustomize('infra/k8s/platform/postgres'))
+k8s_resource('postgres', resource_deps=['cnpg', 'ride-sharing-namespace'], labels=['data'])
+
+
 # Services.
 
 k8s_yaml(kustomize('infra/k8s/overlays/local'))
+k8s_resource(new_name='ride-sharing-namespace', objects=['ride-sharing:namespace'], labels=['services'])
+
+
+def db_password_secret(role):
+    """A Secret holding the Postgres password for `role`, generated once into secrets/."""
+    path = 'secrets/postgres-%s.password' % role
+    if not os.path.exists(path):
+        # Hex, so the password never needs escaping in a connection string.
+        local('mkdir -p secrets && openssl rand -hex 24 | tr -d "\\n" > %s' % path, quiet=True, echo_off=True)
+    k8s_yaml(local(
+        'kubectl create secret generic postgres-%s --namespace ride-sharing --type kubernetes.io/basic-auth --from-literal username=%s --from-file password=%s --dry-run=client -o yaml' % (role, role, path),
+        quiet=True,
+        echo_off=True,
+    ))
+
+
+db_password_secret('identity')
+k8s_resource(
+    new_name='identity-db',
+    objects=['postgres-identity:secret', 'identity:databaserole', 'identity:database'],
+    resource_deps=['postgres'],
+    labels=['data'],
+)
 
 
 def go_service(name, objects=[], resource_deps=[], links=[]):

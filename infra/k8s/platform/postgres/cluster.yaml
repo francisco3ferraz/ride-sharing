@@ -1,0 +1,22 @@
+# One Postgres instance holding every service's database. Each service declares its own
+# Database and DatabaseRole next to its manifests (see services/identity). With no
+# bootstrap block, the operator's default "app" database is created and left unused.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+spec:
+  instances: 1
+  # Pinned, so an operator upgrade can't change the Postgres version underneath us.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+  # Requests equal to limits give the pod the Guaranteed QoS class, as CNPG recommends:
+  # it's the last pod killed when the node runs out of memory.
+  resources:
+    requests:
+      cpu: 1
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
+  storage:
+    size: 1Gi

@@ -1,0 +1,11 @@
+# Identity's own database. The owner can create tables in it; other roles can't read them.
+# Deleting this object leaves the data in place (the default reclaim policy, retain).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: identity
+spec:
+  cluster:
+    name: postgres
+  name: identity
+  owner: identity

@@ -1,0 +1,16 @@
+version: v2
+# Wipes gen/ before every run, so nothing hand-written may live there.
+clean: true
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/francisco3ferraz/ride-sharing/gen
+plugins:
+  # Plugin versions are pinned as tools in go.mod, so every machine generates the same code.
+  - local: ["go", "tool", "protoc-gen-go"]
+    out: gen
+    opt: paths=source_relative
+  - local: ["go", "tool", "protoc-gen-go-grpc"]
+    out: gen
+    opt: paths=source_relative

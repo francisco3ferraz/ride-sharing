@@ -1,0 +1,17 @@
+syntax = "proto3";
+package ridesharing.pricing.v1;
+
+import "google/protobuf/duration.proto";
+
+service PricingService {
+  rpc EstimateFare(EstimateFareRequest) returns (EstimateFareResponse);
+}
+
+message EstimateFareRequest {
+  int32 distance_meters = 1;
+  google.protobuf.Duration duration = 2;
+}
+
+message EstimateFareResponse {
+  int64 fare_cents = 1;
+}

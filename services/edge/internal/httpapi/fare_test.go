@@ -81,9 +81,24 @@ func TestFareEstimateMapsPricingErrors(t *testing.T) {
 	}
 }
 
+func TestFareEstimateRejectsOtherMethods(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/fare-estimate?distance_meters=5000&duration_seconds=600", nil)
+	NewHandler(&fakePricing{}).Routes().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+}
+
+func TestHealthz(t *testing.T) {
+	rec := serve(t, &fakePricing{}, "/healthz")
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+// serve sends a GET request through the real routes, so tests cover routing too.
 func serve(t *testing.T, pricing pricingv1.PricingServiceClient, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	NewHandler(pricing).FareEstimate(rec, httptest.NewRequest(http.MethodGet, target, nil))
+	NewHandler(pricing).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
 	return rec
 }

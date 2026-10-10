@@ -1,0 +1,14 @@
+# The Postgres role Identity logs in as. It can log in and nothing more; it gets its
+# rights on its own database by owning it (database.yaml).
+apiVersion: postgresql.cnpg.io/v1
+kind: DatabaseRole
+metadata:
+  name: identity
+spec:
+  cluster:
+    name: postgres
+  name: identity
+  login: true
+  # Generated locally by the Tiltfile, never committed. Identity's pod reads it too.
+  passwordSecret:
+    name: postgres-identity

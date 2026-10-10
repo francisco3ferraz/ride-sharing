@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pricing
+  labels:
+    app.kubernetes.io/name: pricing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pricing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pricing
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pricing
+          image: pricing # Tilt swaps in the image it built
+          ports:
+            - name: grpc
+              containerPort: 50051
+          env:
+            - name: LISTEN_ADDR
+              value: ":50051"
+          # Both probes call the standard gRPC health service (grpc.health.v1.Health).
+          readinessProbe:
+            grpc:
+              port: 50051
+            periodSeconds: 5
+          livenessProbe:
+            grpc:
+              port: 50051
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

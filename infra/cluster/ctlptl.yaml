@@ -1,0 +1,11 @@
+# The local kind cluster and the image registry Tilt pushes to: `make cluster`.
+apiVersion: ctlptl.dev/v1alpha1
+kind: Registry
+name: ride-sharing-registry
+port: 5005
+---
+apiVersion: ctlptl.dev/v1alpha1
+kind: Cluster
+product: kind
+name: kind-ride-sharing
+registry: ride-sharing-registry

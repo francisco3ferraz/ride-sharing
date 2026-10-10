@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity
+  labels:
+    app.kubernetes.io/name: identity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: identity
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identity
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      # Applies the migrations before the app container starts, in every new pod
+      # (ADR 0007). If it fails, the pod never starts and the old one keeps serving.
+      initContainers:
+        - name: migrate
+          image: identity # the same image as the app, so code and schema match
+          args: ["migrate"]
+          # Keep in step with the app container's database settings below.
+          env:
+            - name: PGHOST
+              value: postgres-rw
+            - name: PGDATABASE
+              value: identity
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-identity
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-identity
+                  key: password
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-ca/ca.crt
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: identity
+          image: identity # Tilt swaps in the image it built
+          ports:
+            - name: grpc
+              containerPort: 50052
+          env:
+            - name: LISTEN_ADDR
+              value: ":50052"
+            # Standard OpenTelemetry variables, read by the Go SDK itself.
+            - name: OTEL_SERVICE_NAME
+              value: identity
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability.svc:4317
+            # Standard libpq variables, which pgx reads itself when given an empty
+            # connection string. The password comes from the Secret the Tiltfile builds.
+            - name: PGHOST
+              value: postgres-rw
+            - name: PGDATABASE
+              value: identity
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-identity
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-identity
+                  key: password
+            # Encrypt, and check that the server's certificate was signed by
+            # CloudNativePG's CA and names postgres-rw.
+            - name: PGSSLMODE
+              value: verify-full
+            - name: PGSSLROOTCERT
+              value: /etc/postgres-ca/ca.crt
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
+          # Both probes call the standard gRPC health service (grpc.health.v1.Health).
+          readinessProbe:
+            grpc:
+              port: 50052
+            periodSeconds: 5
+          livenessProbe:
+            grpc:
+              port: 50052
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        # Only the CA's certificate. The Secret also holds the CA's private key, and
+        # anyone with that could sign a certificate and pose as the database.
+        - name: postgres-ca
+          secret:
+            secretName: postgres-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

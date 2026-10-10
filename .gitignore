@@ -1,0 +1,34 @@
+# Secrets and local certificates (generated locally, never committed)
+certs/
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+
+# Go
+/bin/
+*.test
+*.out
+coverage.*
+go.work
+go.work.sum
+
+# Frontend
+node_modules/
+dist/
+.vite/
+test-results/
+playwright-report/
+
+# Tilt
+tilt_modules/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Claude Code personal settings
+.claude/settings.local.json

@@ -29,6 +29,11 @@ spec:
               value: ":8080"
             - name: PRICING_ADDR
               value: "pricing:50051"
+            # Standard OpenTelemetry variables, read by the Go SDK itself.
+            - name: OTEL_SERVICE_NAME
+              value: edge
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability.svc:4317
           readinessProbe:
             httpGet:
               path: /healthz

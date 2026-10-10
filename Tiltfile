@@ -48,6 +48,45 @@ k8s_resource(
 )
 
 
+# Observability: the OpenTelemetry Collector and the backends it feeds, all viewed in
+# Grafana. To save memory, switch any of them off in Tilt's UI when you don't need it.
+
+k8s_yaml(kustomize('infra/k8s/platform/observability'))
+k8s_resource(new_name='observability-namespace', objects=['observability:namespace'], labels=['observability'])
+k8s_resource(
+    new_name='observability-routes',
+    objects=['grafana:httproute', 'jaeger:httproute', 'prometheus:httproute'],
+    resource_deps=['gateway-api-crds', 'observability-namespace'],
+    labels=['observability'],
+)
+
+helm_repo('open-telemetry', 'https://open-telemetry.github.io/opentelemetry-helm-charts', resource_name='open-telemetry-repo', labels=['observability'])
+helm_repo('jaegertracing', 'https://jaegertracing.github.io/helm-charts', resource_name='jaegertracing-repo', labels=['observability'])
+helm_repo('prometheus-community', 'https://prometheus-community.github.io/helm-charts', resource_name='prometheus-community-repo', labels=['observability'])
+helm_repo('grafana-community', 'https://grafana-community.github.io/helm-charts', resource_name='grafana-community-repo', labels=['observability'])
+
+
+def observability_chart(name, chart, version, repo, links=[]):
+    values = 'infra/k8s/platform/observability/%s.values.yaml' % name
+    helm_resource(
+        name,
+        chart,
+        namespace='observability',
+        flags=['--version', version, '--values', values],
+        deps=[values],
+        resource_deps=[repo, 'observability-namespace'],
+        labels=['observability'],
+        links=links,
+    )
+
+
+observability_chart('otel-collector', 'open-telemetry/opentelemetry-collector', '0.175.1', 'open-telemetry-repo')
+observability_chart('jaeger', 'jaegertracing/jaeger', '4.14.1', 'jaegertracing-repo', links=['https://jaeger.ride-sharing.localhost'])
+observability_chart('prometheus', 'prometheus-community/prometheus', '29.36.1', 'prometheus-community-repo', links=['https://prometheus.ride-sharing.localhost'])
+observability_chart('loki', 'grafana-community/loki', '18.15.1', 'grafana-community-repo')
+observability_chart('grafana', 'grafana-community/grafana', '13.5.0', 'grafana-community-repo', links=['https://grafana.ride-sharing.localhost'])
+
+
 # Services.
 
 k8s_yaml(kustomize('infra/k8s/overlays/local'))

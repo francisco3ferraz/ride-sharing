@@ -25,5 +25,7 @@ spec:
         namespaces:
           from: Selector
           selector:
-            matchLabels:
-              kubernetes.io/metadata.name: ride-sharing
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values: [ride-sharing, observability]

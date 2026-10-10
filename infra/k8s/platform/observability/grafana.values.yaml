@@ -1,0 +1,53 @@
+# Helm values for Grafana, the one UI for traces, metrics and logs.
+
+# Local only: anyone reaching grafana.ride-sharing.localhost is an admin, no login.
+grafana.ini:
+  server:
+    root_url: https://grafana.ride-sharing.localhost
+  auth:
+    disable_login_form: true
+  auth.anonymous:
+    enabled: true
+    org_role: Admin
+
+# Fixed, so Helm doesn't generate a new random password (and restart Grafana) on
+# every upgrade. Only used if you turn the login form back on.
+adminPassword: admin
+
+persistence:
+  enabled: false
+
+resources:
+  limits:
+    memory: 256Mi
+
+# Data sources are provisioned from this file, so a fresh Grafana is ready to use.
+# The cross-links let you jump from a log line to its trace, and from a span to its logs.
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        url: http://prometheus-server.observability.svc
+        isDefault: true
+      - name: Jaeger
+        uid: jaeger
+        type: jaeger
+        url: http://jaeger.observability.svc:16686
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            filterByTraceID: true
+      - name: Loki
+        uid: loki
+        type: loki
+        url: http://loki.observability.svc:3100
+        jsonData:
+          derivedFields:
+            - name: TraceID
+              matcherType: label
+              matcherRegex: trace_id
+              datasourceUid: jaeger
+              url: "$${__value.raw}"

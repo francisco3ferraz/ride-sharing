@@ -1,0 +1,13 @@
+# Helm values for Jaeger v2 as one all-in-one pod with in-memory storage.
+# Traces are lost on restart, which is fine for local development.
+storage:
+  type: memory
+jaeger:
+  image:
+    # Pinned below the chart's default: Jaeger 2.21.0 removed the v1 HTTP API
+    # (jaegertracing/jaeger#9260), which Grafana's Jaeger data source still calls.
+    # Unpin once Grafana supports Jaeger's v3 API.
+    tag: "2.20.0"
+  resources:
+    limits:
+      memory: 512Mi

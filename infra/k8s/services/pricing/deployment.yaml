@@ -27,6 +27,11 @@ spec:
           env:
             - name: LISTEN_ADDR
               value: ":50051"
+            # Standard OpenTelemetry variables, read by the Go SDK itself.
+            - name: OTEL_SERVICE_NAME
+              value: pricing
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability.svc:4317
           # Both probes call the standard gRPC health service (grpc.health.v1.Health).
           readinessProbe:
             grpc:

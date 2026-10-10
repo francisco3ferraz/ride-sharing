@@ -1,0 +1,54 @@
+# Helm values for the OpenTelemetry Collector. Services and Traefik send all their
+# telemetry here over OTLP; the Collector adds Kubernetes metadata and forwards each
+# signal to its backend. Services never talk to Jaeger, Prometheus or Loki directly.
+mode: deployment
+fullnameOverride: otel-collector
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+presets:
+  # Adds k8s.pod.name and friends to every span, metric and log line, so you can see
+  # which pod handled a request.
+  kubernetesAttributes:
+    enabled: true
+
+config:
+  # Drop the chart's default receivers we don't use.
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+  exporters:
+    otlp_grpc/jaeger:
+      endpoint: jaeger.observability.svc:4317
+      tls:
+        insecure: true
+    otlp_http/prometheus:
+      endpoint: http://prometheus-server.observability.svc/api/v1/otlp
+    otlp_http/loki:
+      endpoint: http://loki.observability.svc:3100/otlp
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        exporters: [otlp_grpc/jaeger]
+      metrics:
+        receivers: [otlp]
+        exporters: [otlp_http/prometheus]
+      logs:
+        receivers: [otlp]
+        exporters: [otlp_http/loki]
+
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+resources:
+  limits:
+    memory: 256Mi

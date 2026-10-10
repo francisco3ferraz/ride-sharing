@@ -1,0 +1,21 @@
+# Helm values for Prometheus. Metrics arrive from the Collector over OTLP, so only
+# the server is needed. Alerting moves to Grafana in Step 6.
+alertmanager:
+  enabled: false
+kube-state-metrics:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+
+server:
+  extraFlags:
+    - web.enable-lifecycle
+    - web.enable-otlp-receiver
+  retention: 2d
+  persistentVolume:
+    enabled: false
+  resources:
+    limits:
+      memory: 512Mi

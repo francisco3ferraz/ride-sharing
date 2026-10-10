@@ -32,6 +32,12 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// `identity migrate` is the init container's command (ADR 0007). It applies the
+	// migrations and exits, before any server or telemetry is set up.
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		return migrate(ctx)
+	}
+
 	shutdownTelemetry, err := telemetry.Setup(ctx)
 	if err != nil {
 		return fmt.Errorf("set up telemetry: %w", err)

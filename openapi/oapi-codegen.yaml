@@ -1,0 +1,13 @@
+# How `make generate` turns openapi.yaml into the Edge's Go code. Paths are relative
+# to the repo root, where make runs.
+package: api
+output: services/edge/internal/api/api.gen.go
+generate:
+  models: true
+  # Routes on Go's own http.ServeMux (method and path patterns, Go 1.22+).
+  std-http-server: true
+  # Handlers take and return typed values; the generated code does the JSON.
+  strict-server: true
+  # Compiles the spec into the binary (GetSwagger), so the request validator can
+  # read it without the file being in the image.
+  embedded-spec: true

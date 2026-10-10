@@ -1,2 +1,3 @@
 # Collapse generated code in GitHub diffs and leave it out of language stats.
 gen/** linguist-generated=true
+services/edge/internal/api/** linguist-generated=true

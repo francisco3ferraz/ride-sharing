@@ -1,0 +1,29 @@
+# The cluster's single entry point. Services attach their own HTTPRoutes to it.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public
+spec:
+  gatewayClassName: traefik
+  # Traefik requires listener ports to match its entrypoints (8000 and 8443).
+  # Its Service exposes them as 80 and 443.
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8000
+      allowedRoutes:
+        namespaces:
+          from: Same # only the HTTPS redirect next to this file
+    - name: https
+      protocol: HTTPS
+      port: 8443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ride-sharing-tls # created by Tilt from `make certs`
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: ride-sharing

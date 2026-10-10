@@ -1,4 +1,4 @@
-.PHONY: generate lint test cluster cluster-down up
+.PHONY: generate lint test cluster cluster-down certs up
 
 ## generate: regenerate gen/ from proto/
 generate:
@@ -22,6 +22,12 @@ cluster:
 ## cluster-down: delete the local cluster and its registry
 cluster-down:
 	ctlptl delete -f infra/cluster/ctlptl.yaml
+
+## certs: create the locally trusted HTTPS certificate (once per machine)
+certs:
+	mkdir -p certs
+	mkcert -cert-file certs/ride-sharing.pem -key-file certs/ride-sharing-key.pem \
+		ride-sharing.localhost "*.ride-sharing.localhost"
 
 ## up: build and run everything in the cluster, rebuilding on save
 up:

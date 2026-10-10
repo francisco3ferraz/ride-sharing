@@ -9,3 +9,16 @@ kind: Cluster
 product: kind
 name: kind-ride-sharing
 registry: ride-sharing-registry
+kindV1Alpha4Cluster:
+  nodes:
+    - role: control-plane
+      # localhost:80 and :443 reach Traefik's NodePorts. Bound to 127.0.0.1 only,
+      # so nothing else on your network can reach the cluster.
+      # kind can't change these on a running cluster: `make cluster-down cluster` to apply.
+      extraPortMappings:
+        - containerPort: 30080
+          hostPort: 80
+          listenAddress: 127.0.0.1
+        - containerPort: 30443
+          hostPort: 443
+          listenAddress: 127.0.0.1

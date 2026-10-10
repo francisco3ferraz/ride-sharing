@@ -1,0 +1,8 @@
+# Allowlist: only what the Go build needs is sent to Docker. Everything else,
+# including certs/ and any local secrets, stays out of the image build.
+*
+!go.mod
+!go.sum
+!gen
+!shared
+!services

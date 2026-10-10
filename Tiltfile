@@ -148,6 +148,8 @@ def go_service(name, objects=[], resource_deps=[], links=[]):
 
 
 go_service('pricing')
+# Its init container runs the migrations, so its database and role must exist first.
+go_service('identity', resource_deps=['identity-db'])
 go_service(
     'edge',
     objects=['edge:httproute'],

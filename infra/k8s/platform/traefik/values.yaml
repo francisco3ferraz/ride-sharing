@@ -1,0 +1,30 @@
+# Helm values for Traefik, installed by Tilt. Only what differs from the chart's
+# defaults is here; see them all with `helm show values traefik/traefik`.
+
+# Route with the standard Gateway API only. Traefik's own resources and the older
+# Ingress API stay off, so every route in this project is portable.
+providers:
+  kubernetesGateway:
+    enabled: true
+  kubernetesCRD:
+    enabled: false
+  kubernetesIngress:
+    enabled: false
+ingressClass:
+  enabled: false
+
+# Our Gateway lives in infra/k8s/platform/gateway. The chart still creates the
+# "traefik" GatewayClass that it points to.
+gateway:
+  enabled: false
+
+# kind has no cloud load balancer. A NodePort Service plus kind's port mappings
+# (infra/cluster/ctlptl.yaml) connect localhost:80 and :443 to Traefik.
+service:
+  spec:
+    type: NodePort
+ports:
+  web:
+    nodePort: 30080
+  websecure:
+    nodePort: 30443

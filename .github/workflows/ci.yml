@@ -43,10 +43,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # On pull requests: lint, format check, and breaking-change check against the base branch.
+      # buf-action checks breaking changes only on pull requests unless told to. On a push,
+      # it compares against the commit before the push.
       - uses: bufbuild/buf-action@v1
         with:
           version: 1.73.0
+          breaking: true
           push: false
           pr_comment: false
 

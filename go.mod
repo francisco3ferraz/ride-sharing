@@ -10,6 +10,7 @@ tool (
 
 require (
 	github.com/caarlos0/env/v11 v11.4.1
+	github.com/exaring/otelpgx v0.13.0
 	github.com/getkin/kin-openapi v0.142.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0

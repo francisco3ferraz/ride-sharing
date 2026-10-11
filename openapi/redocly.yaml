@@ -1,0 +1,6 @@
+# Redocly's recommended lint rules for openapi.yaml, minus one that doesn't fit here.
+extends:
+  - recommended
+rules:
+  # Our server really is localhost.
+  no-server-example.com: off

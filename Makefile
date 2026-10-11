@@ -1,15 +1,24 @@
-.PHONY: generate lint test cluster cluster-down certs up
+.PHONY: generate lint lint-openapi test cluster cluster-down certs up
 
-## generate: regenerate gen/ from proto/
+# Redocly CLI lints the OpenAPI spec, as buf lint does the protos. CI runs it through
+# `make lint-openapi`, so this pin is the only one.
+REDOCLY := npx --yes @redocly/cli@2.54.3
+
+## generate: regenerate gen/ from proto/, and the Edge's API code from openapi/
 generate:
 	buf generate
+	go tool oapi-codegen -config openapi/oapi-codegen.yaml openapi/openapi.yaml
 
 ## lint: run every check CI runs, except tests
-lint:
+lint: lint-openapi
 	buf lint
 	buf format --diff --exit-code
 	go mod tidy -diff
 	golangci-lint run ./...
+
+## lint-openapi: lint the OpenAPI spec with the rules in openapi/redocly.yaml
+lint-openapi:
+	$(REDOCLY) lint --config openapi/redocly.yaml openapi/openapi.yaml
 
 ## test: run Go tests with the race detector
 test:

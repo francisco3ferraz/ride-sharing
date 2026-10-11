@@ -74,13 +74,18 @@ func run() error {
 		}
 	}()
 
+	routes, err := httpapi.NewHandler(pricingv1.NewPricingServiceClient(conn)).Routes()
+	if err != nil {
+		return fmt.Errorf("build routes: %w", err)
+	}
+
 	lis, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.ListenAddr, err)
 	}
 
 	srv := &http.Server{
-		Handler: httpapi.NewHandler(pricingv1.NewPricingServiceClient(conn)).Routes(),
+		Handler: routes,
 		// Stops a client from holding a connection open by sending headers very slowly.
 		ReadHeaderTimeout: 5 * time.Second,
 	}

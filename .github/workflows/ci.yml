@@ -43,10 +43,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-
       # On pull requests: lint, format check, and breaking-change check against the base branch.
       - uses: bufbuild/buf-action@v1
         with:
@@ -54,11 +50,41 @@ jobs:
           push: false
           pr_comment: false
 
+  openapi:
+    name: OpenAPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Lint the spec
+        run: make lint-openapi
+
+  generated:
+    name: Generated code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The generators run through `go tool`, pinned in go.mod.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          version: 1.73.0
+          setup_only: true
+
+      # Regenerates everything; any change, or any new file, means a commit forgot it.
       - name: Check generated code is up to date
         run: |
-          buf generate
-          if [ -n "$(git status --porcelain gen)" ]; then
-            echo "gen/ is out of date. Run 'make generate' and commit the result."
-            git status --porcelain gen
+          make generate
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Generated code is out of date. Run 'make generate' and commit the result."
+            git status --porcelain
             exit 1
           fi

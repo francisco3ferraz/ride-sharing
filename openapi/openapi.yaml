@@ -1,0 +1,80 @@
+openapi: 3.0.4
+info:
+  title: Ride-sharing API
+  description: The public REST API of the Lisbon ride-sharing app, served by the Edge.
+  version: "1.0.0"
+  license:
+    name: MIT
+    url: https://opensource.org/license/mit
+
+servers:
+  - url: https://ride-sharing.localhost
+    description: The local cluster, through Traefik
+
+paths:
+  /v1/fare-estimate:
+    get:
+      operationId: getFareEstimate
+      summary: Returns an estimate of a ride.
+      security: []
+      parameters:
+        - name: distance_meters
+          in: query
+          description: Trip distance in meters.
+          required: true
+          schema:
+            type: integer
+            format: int32
+        - name: duration_seconds
+          in: query
+          description: Trip duration in seconds.
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FareEstimate"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+
+components:
+  responses:
+    Problem:
+      description: An error, in the RFC 9457 problem details format.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    FareEstimate:
+      type: object
+      required: [fare_cents]
+      properties:
+        fare_cents:
+          type: integer
+          format: int64
+          description: The estimated fare, in euro cents.
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: A URI naming the kind of problem, or about:blank when the status code says enough.
+        title:
+          type: string
+          description: A short summary of the kind of problem.
+        status:
+          type: integer
+          format: int32
+          description: The HTTP status code.
+        detail:
+          type: string
+          description: What went wrong with this particular request.

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pricingv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/pricing/v1"
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 )
 
 // fakePricing stands in for the Pricing service. The handler only depends on the
@@ -47,27 +48,30 @@ func TestFareEstimateRejectsBadQuery(t *testing.T) {
 	rec := serve(t, pricing, "/v1/fare-estimate?distance_meters=five&duration_seconds=600")
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
 	assert.Nil(t, pricing.got, "pricing should not be called")
 }
 
 func TestFareEstimateMapsPricingErrors(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      error
-		wantCode int
-		wantBody string
+		name string
+		err  error
+		want api.Problem
 	}{
 		{
-			name:     "validation error is shown to the client",
-			err:      status.Error(codes.InvalidArgument, "distance_meters must be positive"),
-			wantCode: http.StatusBadRequest,
-			wantBody: "distance_meters must be positive\n",
+			name: "validation error is shown to the client",
+			err:  status.Error(codes.InvalidArgument, "distance_meters must be positive"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Bad Request",
+				Status: http.StatusBadRequest,
+				Detail: new("distance_meters must be positive"),
+			},
 		},
 		{
-			name:     "internal failure is hidden from the client",
-			err:      status.Error(codes.Unavailable, "connection refused"),
-			wantCode: http.StatusInternalServerError,
-			wantBody: "internal error\n",
+			name: "internal failure is hidden from the client",
+			err:  status.Error(codes.Unavailable, "connection refused"),
+			want: api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},
 		},
 	}
 
@@ -75,8 +79,7 @@ func TestFareEstimateMapsPricingErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := serve(t, &fakePricing{err: tt.err}, "/v1/fare-estimate?distance_meters=0&duration_seconds=600")
 
-			assert.Equal(t, tt.wantCode, rec.Code)
-			assert.Equal(t, tt.wantBody, rec.Body.String())
+			assertProblem(t, rec, tt.want)
 		})
 	}
 }

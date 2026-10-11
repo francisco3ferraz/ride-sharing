@@ -1,6 +1,6 @@
-ccessful operation# Redocly's recommended lint rules for openapi.yaml, minus one that doesn't fit here.
+# Redocly's recommended lint rules for openapi.yaml, minus one that doesn't fit here.
 extends:
   - recommended
 rules:
-  # Flags localhost server URLs, but ours really is https://ride-sharing.localhost.
+  # Our server really is localhost.
   no-server-example.com: off

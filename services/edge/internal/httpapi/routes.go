@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 )
 
 // Routes returns the Edge's HTTP routes, traced with OpenTelemetry. The tracing
@@ -12,7 +14,13 @@ import (
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.HandleFunc("GET /v1/fare-estimate", h.FareEstimate)
+
+	server := api.NewStrictHandlerWithOptions(h, nil, api.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc:  requestError,
+		ResponseErrorHandlerFunc: responseError,
+	})
+	// Bad query parameters are reported here; bad bodies go to RequestErrorHandlerFunc.
+	api.HandlerWithOptions(server, api.StdHTTPServerOptions{BaseRouter: mux, ErrorHandlerFunc: requestError})
 
 	return otelhttp.NewHandler(mux, "edge",
 		// Kubernetes probes /healthz every few seconds; those spans would flood Jaeger.

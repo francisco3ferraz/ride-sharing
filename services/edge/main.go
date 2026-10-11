@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	pricingv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/pricing/v1"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/config"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/httpapi"
@@ -56,25 +57,24 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	// NewClient doesn't connect yet. It connects on the first call and reconnects
-	// on its own, so one long-lived connection serves every request.
-	conn, err := grpc.NewClient(
-		cfg.PricingAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		// Sends the current trace ID to Pricing with every call.
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
-	)
+	// The closes are deferred, so they run after the HTTP server below has finished
+	// its requests.
+	pricingConn, err := newConn(cfg.PricingAddr)
 	if err != nil {
 		return fmt.Errorf("create pricing client: %w", err)
 	}
-	// Deferred, so it runs after the HTTP server below has finished its requests.
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Printf("close pricing connection: %v", err)
-		}
-	}()
+	defer closeConn(pricingConn, "pricing")
+	identityConn, err := newConn(cfg.IdentityAddr)
+	if err != nil {
+		return fmt.Errorf("create identity client: %w", err)
+	}
+	defer closeConn(identityConn, "identity")
 
-	routes, err := httpapi.NewHandler(pricingv1.NewPricingServiceClient(conn)).Routes()
+	handler := httpapi.NewHandler(
+		pricingv1.NewPricingServiceClient(pricingConn),
+		identityv1.NewIdentityServiceClient(identityConn),
+	)
+	routes, err := handler.Routes()
 	if err != nil {
 		return fmt.Errorf("build routes: %w", err)
 	}
@@ -110,4 +110,20 @@ func run() error {
 	}
 	log.Print("stopped")
 	return nil
+}
+
+// newConn doesn't connect yet. The connection opens on the first call and reconnects
+// on its own, so one long-lived connection per service serves every request.
+func newConn(addr string) (*grpc.ClientConn, error) {
+	return grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Sends the current trace ID with every call.
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+}
+
+func closeConn(conn *grpc.ClientConn, name string) {
+	if err := conn.Close(); err != nil {
+		log.Printf("close %s connection: %v", name, err)
+	}
 }

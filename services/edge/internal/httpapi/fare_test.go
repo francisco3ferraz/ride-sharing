@@ -85,7 +85,7 @@ func TestFareEstimateMapsPricingErrors(t *testing.T) {
 }
 
 func TestFareEstimateRejectsOtherMethods(t *testing.T) {
-	routes, err := NewHandler(&fakePricing{}).Routes()
+	routes, err := NewHandler(&fakePricing{}, nil).Routes()
 	require.NoError(t, err)
 
 	rec := httptest.NewRecorder()
@@ -116,7 +116,7 @@ func TestHealthz(t *testing.T) {
 // serve sends a GET request through the real routes, so tests cover routing too.
 func serve(t *testing.T, pricing pricingv1.PricingServiceClient, target string) *httptest.ResponseRecorder {
 	t.Helper()
-	routes, err := NewHandler(pricing).Routes()
+	routes, err := NewHandler(pricing, nil).Routes()
 	require.NoError(t, err)
 
 	rec := httptest.NewRecorder()

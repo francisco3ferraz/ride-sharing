@@ -1,5 +1,3 @@
-// Package httpapi holds the Edge's HTTP handlers. They call the internal services and
-// shape responses; business rules stay in the services.
 package httpapi
 
 import (
@@ -13,16 +11,6 @@ import (
 )
 
 const pricingTimeout = 2 * time.Second
-
-var _ api.StrictServerInterface = (*Handler)(nil)
-
-type Handler struct {
-	pricing pricingv1.PricingServiceClient
-}
-
-func NewHandler(pricing pricingv1.PricingServiceClient) *Handler {
-	return &Handler{pricing: pricing}
-}
 
 func (h *Handler) GetFareEstimate(ctx context.Context, req api.GetFareEstimateRequestObject) (api.GetFareEstimateResponseObject, error) {
 	ctx, cancel := context.WithTimeout(ctx, pricingTimeout)

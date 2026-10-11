@@ -10,7 +10,7 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	// Setenv restores the variables after the test, so it's safe to unset them here.
-	for _, key := range []string{"LISTEN_ADDR", "PRICING_ADDR"} {
+	for _, key := range []string{"LISTEN_ADDR", "PRICING_ADDR", "IDENTITY_ADDR"} {
 		t.Setenv(key, "")
 		require.NoError(t, os.Unsetenv(key))
 	}
@@ -20,15 +20,18 @@ func TestLoadDefaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ":8080", cfg.ListenAddr)
 	assert.Equal(t, "localhost:50051", cfg.PricingAddr)
+	assert.Equal(t, "localhost:50052", cfg.IdentityAddr)
 }
 
 func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("LISTEN_ADDR", ":9000")
 	t.Setenv("PRICING_ADDR", "pricing:50051")
+	t.Setenv("IDENTITY_ADDR", "identity:50052")
 
 	cfg, err := Load()
 
 	require.NoError(t, err)
 	assert.Equal(t, ":9000", cfg.ListenAddr)
 	assert.Equal(t, "pricing:50051", cfg.PricingAddr)
+	assert.Equal(t, "identity:50052", cfg.IdentityAddr)
 }

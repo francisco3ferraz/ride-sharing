@@ -27,8 +27,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type IdentityServiceClient interface {
-	// Fails with INVALID_ARGUMENT for a password that breaks the rule or an unspecified
-	// role, and ALREADY_EXISTS for a taken email.
+	// Fails with INVALID_ARGUMENT for an empty email, a password that breaks the rule or
+	// an unspecified role, and ALREADY_EXISTS for a taken email.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	// Fails with UNAUTHENTICATED for an unknown email or a wrong password alike.
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
@@ -66,8 +66,8 @@ func (c *identityServiceClient) Login(ctx context.Context, in *LoginRequest, opt
 // All implementations must embed UnimplementedIdentityServiceServer
 // for forward compatibility.
 type IdentityServiceServer interface {
-	// Fails with INVALID_ARGUMENT for a password that breaks the rule or an unspecified
-	// role, and ALREADY_EXISTS for a taken email.
+	// Fails with INVALID_ARGUMENT for an empty email, a password that breaks the rule or
+	// an unspecified role, and ALREADY_EXISTS for a taken email.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	// Fails with UNAUTHENTICATED for an unknown email or a wrong password alike.
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)

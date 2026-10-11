@@ -2,8 +2,8 @@ syntax = "proto3";
 package ridesharing.identity.v1;
 
 service IdentityService {
-  // Fails with INVALID_ARGUMENT for a password that breaks the rule or an unspecified
-  // role, and ALREADY_EXISTS for a taken email.
+  // Fails with INVALID_ARGUMENT for an empty email, a password that breaks the rule or
+  // an unspecified role, and ALREADY_EXISTS for a taken email.
   rpc Register(RegisterRequest) returns (RegisterResponse);
   // Fails with UNAUTHENTICATED for an unknown email or a wrong password alike.
   rpc Login(LoginRequest) returns (LoginResponse);

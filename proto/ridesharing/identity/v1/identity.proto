@@ -1,0 +1,41 @@
+syntax = "proto3";
+package ridesharing.identity.v1;
+
+service IdentityService {
+  // Fails with INVALID_ARGUMENT for a password that breaks the rule or an unspecified
+  // role, and ALREADY_EXISTS for a taken email.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  // Fails with UNAUTHENTICATED for an unknown email or a wrong password alike.
+  rpc Login(LoginRequest) returns (LoginResponse);
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  ROLE_DRIVER = 1;
+  ROLE_RIDER = 2;
+}
+
+message User {
+  string id = 1;
+  string email = 2;
+  Role role = 3;
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  Role role = 3;
+}
+
+message RegisterResponse {
+  User user = 1;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  User user = 1;
+}

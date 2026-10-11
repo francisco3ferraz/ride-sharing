@@ -28,6 +28,17 @@ func responseError(w http.ResponseWriter, r *http.Request, err error) {
 	writeProblem(w, http.StatusInternalServerError, "")
 }
 
+// The spec validator's error handler. Its 4xx messages describe the client's input;
+// a 5xx message is about our side.
+func validationError(w http.ResponseWriter, message string, code int) {
+	if code >= http.StatusInternalServerError {
+		log.Printf("validate request: %s", message)
+		writeProblem(w, code, "")
+		return
+	}
+	writeProblem(w, code, message)
+}
+
 // about:blank means the status code says it all, so the title is its standard text.
 func writeProblem(w http.ResponseWriter, code int, detail string) {
 	problem := api.Problem{

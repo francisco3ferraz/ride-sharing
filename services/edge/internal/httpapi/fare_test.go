@@ -85,11 +85,26 @@ func TestFareEstimateMapsPricingErrors(t *testing.T) {
 }
 
 func TestFareEstimateRejectsOtherMethods(t *testing.T) {
+	routes, err := NewHandler(&fakePricing{}).Routes()
+	require.NoError(t, err)
+
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/fare-estimate?distance_meters=5000&duration_seconds=600", nil)
-	NewHandler(&fakePricing{}).Routes().ServeHTTP(rec, req)
+	routes.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+	assert.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func TestUnknownPathIsNotFound(t *testing.T) {
+	rec := serve(t, &fakePricing{}, "/v1/nope")
+
+	assertProblem(t, rec, api.Problem{
+		Type:   "about:blank",
+		Title:  "Not Found",
+		Status: http.StatusNotFound,
+		Detail: new("no matching operation was found"),
+	})
 }
 
 func TestHealthz(t *testing.T) {
@@ -101,7 +116,10 @@ func TestHealthz(t *testing.T) {
 // serve sends a GET request through the real routes, so tests cover routing too.
 func serve(t *testing.T, pricing pricingv1.PricingServiceClient, target string) *httptest.ResponseRecorder {
 	t.Helper()
+	routes, err := NewHandler(pricing).Routes()
+	require.NoError(t, err)
+
 	rec := httptest.NewRecorder()
-	NewHandler(pricing).Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+	routes.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
 	return rec
 }

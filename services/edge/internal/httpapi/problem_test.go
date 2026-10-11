@@ -65,6 +65,42 @@ func TestRequestError(t *testing.T) {
 	})
 }
 
+func TestValidationError(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+		code    int
+		want    api.Problem
+	}{
+		{
+			name:    "client error is shown to the client",
+			message: `parameter "distance_meters" in query has an error: value is required but missing`,
+			code:    http.StatusBadRequest,
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Bad Request",
+				Status: http.StatusBadRequest,
+				Detail: new(`parameter "distance_meters" in query has an error: value is required but missing`),
+			},
+		},
+		{
+			name:    "internal failure is hidden from the client",
+			message: "error validating route: decoding failed",
+			code:    http.StatusInternalServerError,
+			want:    api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			validationError(rec, tt.message, tt.code)
+
+			assertProblem(t, rec, tt.want)
+		})
+	}
+}
+
 // assertProblem checks that rec holds the problem want, with the RFC 9457 media type.
 func assertProblem(t *testing.T, rec *httptest.ResponseRecorder, want api.Problem) {
 	t.Helper()

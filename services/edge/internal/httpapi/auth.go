@@ -12,8 +12,8 @@ import (
 )
 
 // Identity hashes a password on every call and limits how many hashes run at once, so
-// in a burst of logins requests wait their turn. Revisit after measuring one.
-const identityTimeout = 5 * time.Second
+// in a burst of logins requests wait their turn.
+const identityTimeout = 2 * time.Second
 
 func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestObject) (api.RegisterUserResponseObject, error) {
 	ctx, cancel := context.WithTimeout(ctx, identityTimeout)

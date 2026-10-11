@@ -1,0 +1,24 @@
+version: "2"
+
+# Applies to every service below. pgx/v5's defaults are pgtype.UUID and
+# pgtype.Timestamptz, which carry a Valid flag even on NOT NULL columns. These
+# overrides cover NOT NULL columns only; nullable ones keep the pgtype types.
+overrides:
+  go:
+    overrides:
+      - db_type: uuid
+        go_type: github.com/google/uuid.UUID
+      - db_type: timestamptz
+        go_type: time.Time
+
+# One entry per service. The schema is the service's goose migrations, so it can't
+# drift from what the init container applies; sqlc skips each file's Down section.
+sql:
+  - engine: postgresql
+    schema: services/identity/migrations
+    queries: services/identity/queries
+    gen:
+      go:
+        package: db
+        out: services/identity/internal/db
+        sql_package: pgx/v5

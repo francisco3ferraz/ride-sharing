@@ -81,6 +81,12 @@ jobs:
           version: 1.73.0
           setup_only: true
 
+      # A prebuilt binary, since sqlc isn't in go.mod. Keep in step with SQLC_VERSION in
+      # the Makefile, which make generate checks.
+      - uses: sqlc-dev/setup-sqlc@v5
+        with:
+          sqlc-version: 1.31.1
+
       # Regenerates everything; any change, or any new file, means a commit forgot it.
       - name: Check generated code is up to date
         run: |

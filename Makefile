@@ -4,10 +4,22 @@
 # `make lint-openapi`, so this pin is the only one.
 REDOCLY := npx --yes @redocly/cli@2.54.3
 
-## generate: regenerate gen/ from proto/, and the Edge's API code from openapi/
+# sqlc isn't a Go tool dependency (it needs cgo and has a large dependency graph), so
+# it's installed separately. Its version is written into every file it generates, so a
+# different local version would fail CI's generated-code check; generate checks first.
+# sqlc also never deletes the file of a removed query, so its output folders are wiped
+# before it runs, as buf wipes gen/.
+SQLC_VERSION := 1.31.1
+
+## generate: regenerate gen/ from proto/, the Edge's API code from openapi/, and each
+## service's internal/db from its queries/
 generate:
+	@sqlc version 2>/dev/null | grep -qx 'v$(SQLC_VERSION)' || \
+		{ echo "make generate needs sqlc v$(SQLC_VERSION), found: $$(sqlc version 2>&1)"; exit 1; }
 	buf generate
 	go tool oapi-codegen -config openapi/oapi-codegen.yaml openapi/openapi.yaml
+	rm -rf services/*/internal/db
+	sqlc generate
 
 ## lint: run every check CI runs, except tests
 lint: lint-openapi

@@ -55,7 +55,7 @@ The browser only ever talks to the Edge, through Traefik. The Edge holds no busi
 
 | Command | What it does |
 |---|---|
-| `make generate` | Regenerate Go code from the `.proto` files and the OpenAPI spec |
+| `make generate` | Regenerate Go code from the `.proto` files, the OpenAPI spec and each service's SQL queries (needs Buf and [sqlc](https://sqlc.dev/) 1.31.1) |
 | `make lint` | Lint the spec (Redocly, through `npx`), run Buf lint and format checks, the `go.mod` tidy check and golangci-lint |
 | `make test` | Run Go tests with the race detector |
 
@@ -64,7 +64,7 @@ Generated code is committed, and CI fails if it's out of date.
 ## Repository layout
 
 ```
-services/<name>/   one folder per service: main.go, internal/, migrations/, Dockerfile
+services/<name>/   one folder per service: main.go, internal/, migrations/, queries/, Dockerfile
 shared/            plumbing shared by services (telemetry, the gRPC server)
 proto/             gRPC contracts, managed with Buf
 openapi/           the REST contract and its code generation and lint config

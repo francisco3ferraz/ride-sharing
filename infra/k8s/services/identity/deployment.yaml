@@ -73,6 +73,13 @@ spec:
               value: identity
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://otel-collector.observability.svc:4317
+            # Go doesn't read the container's memory limit, so by default its GC lets the
+            # heap reach twice the live data. Each argon2id hash allocates 19 MiB, so a
+            # login burst could cross the limit and get the pod OOM-killed. Near this
+            # soft limit the GC works harder instead. Keep it ~80% of limits.memory: the
+            # rest is for memory Go doesn't manage.
+            - name: GOMEMLIMIT
+              value: 200MiB
             # Standard libpq variables, which pgx reads itself when given an empty
             # connection string. The password comes from the Secret the Tiltfile builds.
             - name: PGHOST
@@ -108,12 +115,13 @@ spec:
             grpc:
               port: 50052
             periodSeconds: 10
+          # Up to 4 argon2id hashes at once, 19 MiB each, on top of the server itself.
           resources:
             requests:
               cpu: 10m
               memory: 32Mi
             limits:
-              memory: 128Mi
+              memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

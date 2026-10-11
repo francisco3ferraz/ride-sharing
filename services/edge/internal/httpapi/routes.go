@@ -1,14 +1,28 @@
 package httpapi
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 )
+
+// No request in the API needs more, and the validator and the handlers each hold the
+// whole body in memory.
+const maxBodyBytes = 64 << 10
+
+// The validator checks a format only once it's registered, and by default only byte,
+// date and date-time are. The registry is global, so this runs once.
+func init() {
+	openapi3.DefineStringFormatValidator("email", openapi3.NewRegexpFormatValidator(openapi3.FormatOfStringForEmail))
+}
 
 // Routes returns the Edge's HTTP routes, traced with OpenTelemetry. The tracing
 // middleware continues the trace Traefik started (from its traceparent header) and
@@ -34,12 +48,32 @@ func (h *Handler) Routes() (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.Handle("/v1/", validate(apiMux))
+	mux.Handle("/v1/", limitBody(validate(apiMux)))
 
 	return otelhttp.NewHandler(mux, "edge",
 		// Kubernetes probes /healthz every few seconds; those spans would flood Jaeger.
 		otelhttp.WithFilter(func(r *http.Request) bool { return r.URL.Path != "/healthz" }),
 	), nil
+}
+
+// limitBody answers 413 for a body over maxBodyBytes. It reads the body before the
+// validator does: the validator's error handler gets only a message, so it couldn't
+// tell an oversized body from a malformed one.
+func limitBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeProblem(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request body must be at most %d bytes", maxBodyBytes))
+			return
+		}
+		if err != nil {
+			writeProblem(w, http.StatusBadRequest, "can't read request body")
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		next.ServeHTTP(w, r)
+	})
 }
 
 // healthz reports that the Edge is up. It deliberately doesn't check other services:

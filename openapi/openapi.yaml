@@ -43,6 +43,62 @@ paths:
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/Problem"
+  /v1/auth/register:
+    post:
+      operationId: registerUser
+      summary: Creates a rider or driver account.
+      description: A taken email gets a 409.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: The account was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+  /v1/auth/login:
+    post:
+      operationId: login
+      summary: Checks an email and password, and returns their user.
+      description: >-
+        An unknown email and a wrong password get the same 401, so the response doesn't
+        reveal which emails are registered.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: The email and password match.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
 
 components:
   responses:
@@ -61,6 +117,16 @@ components:
           type: integer
           format: int64
           description: The estimated fare, in euro cents.
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        # No format: email here. A malformed email gets the same 401 as any other wrong
+        # one, and a stricter format later can't lock out users registered before it.
+        email:
+          type: string
+        password:
+          type: string
     Problem:
       type: object
       required: [type, title, status]
@@ -78,3 +144,33 @@ components:
         detail:
           type: string
           description: What went wrong with this particular request.
+    RegisterRequest:
+      type: object
+      required: [email, password, role]
+      properties:
+        email:
+          type: string
+          format: email
+        # No minLength or maxLength: Identity owns the rule, and its 400 says which part
+        # failed. The description is for clients building a form.
+        password:
+          type: string
+          description: 15 to 128 characters, with no other rules.
+        role:
+          $ref: "#/components/schemas/Role"
+    Role:
+      type: string
+      enum: [rider, driver]
+    User:
+      type: object
+      required: [id, email, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        # No format: email. oapi-codegen's Email type checks the address again while
+        # encoding, and a stored email failing that check would make its login a 500.
+        email:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"

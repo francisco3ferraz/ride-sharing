@@ -20,12 +20,37 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for Role.
+const (
+	Driver Role = "driver"
+	Rider  Role = "rider"
+)
+
+// Valid indicates whether the value is a known member of the Role enum.
+func (e Role) Valid() bool {
+	switch e {
+	case Driver:
+		return true
+	case Rider:
+		return true
+	default:
+		return false
+	}
+}
 
 // FareEstimate defines model for FareEstimate.
 type FareEstimate struct {
 	// FareCents The estimated fare, in euro cents.
 	FareCents int64 `json:"fare_cents"`
+}
+
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // Problem defines model for Problem.
@@ -43,6 +68,25 @@ type Problem struct {
 	Type string `json:"type"`
 }
 
+// RegisterRequest defines model for RegisterRequest.
+type RegisterRequest struct {
+	Email openapi_types.Email `json:"email"`
+
+	// Password 15 to 128 characters, with no other rules.
+	Password string `json:"password"`
+	Role     Role   `json:"role"`
+}
+
+// Role defines model for Role.
+type Role string
+
+// User defines model for User.
+type User struct {
+	Email string             `json:"email"`
+	Id    openapi_types.UUID `json:"id"`
+	Role  Role               `json:"role"`
+}
+
 // GetFareEstimateParams defines parameters for GetFareEstimate.
 type GetFareEstimateParams struct {
 	// DistanceMeters Trip distance in meters.
@@ -52,8 +96,20 @@ type GetFareEstimateParams struct {
 	DurationSeconds int32 `form:"duration_seconds" json:"duration_seconds"`
 }
 
+// LoginJSONRequestBody defines body for Login for application/json ContentType.
+type LoginJSONRequestBody = LoginRequest
+
+// RegisterUserJSONRequestBody defines body for RegisterUser for application/json ContentType.
+type RegisterUserJSONRequestBody = RegisterRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Login Checks an email and password, and returns their user.
+	// (POST /v1/auth/login)
+	Login(w http.ResponseWriter, r *http.Request)
+	// RegisterUser Creates a rider or driver account.
+	// (POST /v1/auth/register)
+	RegisterUser(w http.ResponseWriter, r *http.Request)
 	// GetFareEstimate Returns an estimate of a ride.
 	// (GET /v1/fare-estimate)
 	GetFareEstimate(w http.ResponseWriter, r *http.Request, params GetFareEstimateParams)
@@ -67,6 +123,34 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// Login operation middleware
+func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.Login(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegisterUser operation middleware
+func (siw *ServerInterfaceWrapper) RegisterUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetFareEstimate operation middleware
 func (siw *ServerInterfaceWrapper) GetFareEstimate(w http.ResponseWriter, r *http.Request) {
@@ -235,11 +319,173 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/fare-estimate", wrapper.GetFareEstimate)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/register", wrapper.RegisterUser)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/login", wrapper.Login)
 
 	return m
 }
 
 type ProblemApplicationProblemPlusJSONResponse Problem
+
+type LoginRequestObject struct {
+	Body *LoginJSONRequestBody
+}
+
+type LoginResponseObject interface {
+	VisitLoginResponse(w http.ResponseWriter) error
+}
+
+type Login200JSONResponse User
+
+func (response Login200JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Login400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response Login400ApplicationProblemPlusJSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Login401ApplicationProblemPlusJSONResponse Problem
+
+func (response Login401ApplicationProblemPlusJSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Login413ApplicationProblemPlusJSONResponse Problem
+
+func (response Login413ApplicationProblemPlusJSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Login500ApplicationProblemPlusJSONResponse Problem
+
+func (response Login500ApplicationProblemPlusJSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterUserRequestObject struct {
+	Body *RegisterUserJSONRequestBody
+}
+
+type RegisterUserResponseObject interface {
+	VisitRegisterUserResponse(w http.ResponseWriter) error
+}
+
+type RegisterUser201JSONResponse User
+
+func (response RegisterUser201JSONResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterUser400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RegisterUser400ApplicationProblemPlusJSONResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterUser409ApplicationProblemPlusJSONResponse Problem
+
+func (response RegisterUser409ApplicationProblemPlusJSONResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterUser413ApplicationProblemPlusJSONResponse Problem
+
+func (response RegisterUser413ApplicationProblemPlusJSONResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterUser500ApplicationProblemPlusJSONResponse Problem
+
+func (response RegisterUser500ApplicationProblemPlusJSONResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetFareEstimateRequestObject struct {
 	Params GetFareEstimateParams
@@ -295,6 +541,12 @@ func (response GetFareEstimate500ApplicationProblemPlusJSONResponse) VisitGetFar
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Login Checks an email and password, and returns their user.
+	// (POST /v1/auth/login)
+	Login(ctx context.Context, request LoginRequestObject) (LoginResponseObject, error)
+	// RegisterUser Creates a rider or driver account.
+	// (POST /v1/auth/register)
+	RegisterUser(ctx context.Context, request RegisterUserRequestObject) (RegisterUserResponseObject, error)
 	// GetFareEstimate Returns an estimate of a ride.
 	// (GET /v1/fare-estimate)
 	GetFareEstimate(ctx context.Context, request GetFareEstimateRequestObject) (GetFareEstimateResponseObject, error)
@@ -339,6 +591,68 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
+// Login operation middleware
+func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var request LoginRequestObject
+
+	var body LoginJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.Login(ctx, request.(LoginRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "Login")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LoginResponseObject); ok {
+		if err := validResponse.VisitLoginResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterUser operation middleware
+func (sh *strictHandler) RegisterUser(w http.ResponseWriter, r *http.Request) {
+	var request RegisterUserRequestObject
+
+	var body RegisterUserJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterUser(ctx, request.(RegisterUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterUserResponseObject); ok {
+		if err := validResponse.VisitRegisterUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetFareEstimate operation middleware
 func (sh *strictHandler) GetFareEstimate(w http.ResponseWriter, r *http.Request, params GetFareEstimateParams) {
 	var request GetFareEstimateRequestObject
@@ -370,19 +684,25 @@ func (sh *strictHandler) GetFareEstimate(w http.ResponseWriter, r *http.Request,
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"pFTfb9s2EP5XDre9jZXcNt0wvQVDuhnYgCD1sIcgCGjqbLGRSPZ4TGAU/t8HSrIj18qGoG+U+PG77359",
-	"X9H4LnhHTiJWX5EpBu8i9R/X7NctdflovBNyko86hNYaLda7MgyInz5H7/JdNA11Op9+ZNpghT+Uz/zl",
-	"cBvLA+9+v1dYUzRsQ6bDCi8dELNnBdaBNAQ3H3+DXy8+/AJjKKhJtG0jbDx3WgrMHCNxjvtRM11FsZ0W",
-	"yt+BfSAWO2S00Uz35pDsaehVQ0DjyxoyshdBiT30TwpUOETFCq2Tny9QoewCDZ+0Je7VMH1JlqnG6nYa",
-	"8O4I9uvPZAT3alrhU6FDluci/2m0wBM5gSf2bgtPVhqQxkYImsWa1GqGLICiFM/yorB12xwxipb0QvZ/",
-	"rFbXMADA+Jq+Tfj9u5mEFYqVls4ZLyE2ngVi6jrNO/CbvqEP1tX5PPZzVuTw45zw75slON1Zt52jUuAZ",
-	"9Nonqdatdg/w1NAwRJOcIOpdBHI+bZuZ2N+0r789ZHgs3nkn8zvrNn6+riGtW2vg5urTCi6vl4dK/Gnj",
-	"2jtgW9Ob2OgsAHQICiLxI9Ww3vWwq3rbd6K1hlzs6+J0l6P/tVyhwsQtVtiIhFiVpQ/kok9sqPC8LcdH",
-	"ZWdl0iq8mca8vF6iwkfiOEh+WyyKRUZnLh0sVvi+WBR52oOWph+e8vFtmWf7DU12bUu9QeQ57u1hWWOF",
-	"v5Oc7GQmYd2REEesbs/qxTZAbaNoZyjv34DMBbD5/ksi3qE6lOCAvB8Jp+0TTqQmlvS/o7xX82rSkE5W",
-	"E8l4V78sZ4Tej7jv1HOnTg353WLxH2b8OhM+acqME39KxlCMm9TCsaF5KC4Wi5eoj1qfHV7hh1fhs0OR",
-	"SWxlh9XtncLRPfLMkiR2EbQ72nTeJN0vUDGk0G/O/Fw1BK03ugXTpijECqTh7AKwYk0b+3C2StPFLPq3",
-	"jY+C+7v9vwMA",
+	"1FbbbuM2E36VAf8f6EW1PiRO2+guXWTbAFsg8HrRiyAIaGoscS2RynAYw1j43QtSkuODkjTbbIHeUeIc",
+	"vpn5ODNfhbJVbQ0adiL9KghdbY3D+HFNdl5iFY7KGkbD4SjrutRKsrZmWDcSP35x1oQ7pwqsZDj9n3Ah",
+	"UvG/4aP9YXPrhp3dzWaTiAydIl0HcyIVFwaQyFIC2gAXCNMP7+F8cvYztK4gQ5a6dLCwVEkeiGCjNRz8",
+	"fpCEl451JRnDd022RmLdRLSQhHeqC3bf9axAwFYzgyAZQaAnC1FlIBLReBWp0IZ/mohE8LrG5hNzpIiG",
+	"8N5rwkykN7sOb7fCdv4FFYtNIj7aXJsp3nt0fIwWK6nLcGj1HJM2edCrpXMrS1nP5QGAxsaORh+MnULv",
+	"I2iSfZyrPwvJsELDsCJrclhpLoAL7aCWxFr5UhJQE9dAJIcYE+FYsn+iCL/PZtfQCICyGR7m/fSkJ++J",
+	"YM0lHlu8AFdYYnC+qiStwS4ir5baZOHc0qoXZPPj2ODn6RUYWWmT95lKwBLIufWczktplrAqsOHyTkzg",
+	"5NoBGuvzosf3QRHjbRfhNnl9lZxirh0jvcypbUY7hjxLsv0UjM+ALYxPfgFVSJKKkVzSkMBYsFwgAfkS",
+	"XW9ayZb4UouYBpkXudza6k1E6wSNr4Iu6QxJJCIj/YAkbntwfXZIr3mEOtvLo/c6e9Nwo7ku5icCDTra",
+	"LGz/S6r9vNQKppefZnBxfdVx/6N2c2sgpOSdK2QACrKuE3BID5jBfB3FLrM8vr1SKzQuxmBkFbz/cTUT",
+	"ifBUilQUzLVLh0Nbo3HWk8KBpXzYKg0rzTuPU0x3fV5cX4lEPCC5llaD0WAUpIMtWWuRitPBaDCJJeci",
+	"lmP4MB5Kz8WwDK0zlss6Pg7/woA3S2NXBmIKQZoMZNuuOgJBjty8TFkhTEbjBJyNP7o5CJlFZ35gIHxA",
+	"WcKq0KpoLDqQFASbB4dZSFUgTpyMV5lIm+4umqKi419ttn5mlr5uhu5Njs0+dZg8xh87s/xkNHoz3/Gh",
+	"9AzvOEG3yd4muZKsikGo62Q0esr2FuzjdhDkx6+TH5++Sv7sVXjC2ELlSfNapDe3iWhHikjF+wLV0oE0",
+	"PfEn8YuQPRkXyKUJvENqVpctnzsiPUNpYLnEzkWO7EDCZHR+TLxuCsRCfR/+HQ6av0XB8b9CQamU9WE1",
+	"kQ4UYVjnvpF95/8R9sUgAxvilAv7RzPmulQ8Ui3so+9wZz/OMVZinz+/Ie/t0aH/kqyQkZxIb45GDeka",
+	"Mu1YGoVhZ24kAy9Dixb3Hmktkm56dJJ3rcFD3iQ7HHhx79sk/Wh8E05A41BZkz0NpxW9a+X+IZ7b79h4",
+	"94rSw/5PXil0buFL2Bb0W5j/Zsyctl0vNMYWd1hCGqIOmhDi0tHPqwKhtEqWoErvGCkBLiiszDAjiQu9",
+	"PNpCdneaQdQtbOhOt5u/BgA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

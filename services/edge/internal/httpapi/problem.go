@@ -16,12 +16,19 @@ func requestError(w http.ResponseWriter, _ *http.Request, err error) {
 	writeProblem(w, http.StatusBadRequest, err.Error())
 }
 
-// Services own the rules, so their InvalidArgument messages are safe to show. Handlers
-// must return service errors unwrapped: for a wrapped error, gRPC's message is the
-// whole wrapped text.
+// Services own the rules, so their messages for these codes are written for the client
+// and safe to show. Every other code, and any error that isn't from a service, is a 500.
+var clientErrorStatuses = map[codes.Code]int{
+	codes.InvalidArgument: http.StatusBadRequest,
+	codes.Unauthenticated: http.StatusUnauthorized,
+	codes.AlreadyExists:   http.StatusConflict,
+}
+
+// Handlers must return service errors unwrapped: for a wrapped error, gRPC's message
+// is the whole wrapped text.
 func responseError(w http.ResponseWriter, r *http.Request, err error) {
-	if status.Code(err) == codes.InvalidArgument {
-		writeProblem(w, http.StatusBadRequest, status.Convert(err).Message())
+	if httpStatus, ok := clientErrorStatuses[status.Code(err)]; ok {
+		writeProblem(w, httpStatus, status.Convert(err).Message())
 		return
 	}
 	log.Printf("%s %s: %v", r.Method, r.URL.Path, err)

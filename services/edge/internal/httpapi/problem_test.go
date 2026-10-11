@@ -32,6 +32,26 @@ func TestResponseError(t *testing.T) {
 			},
 		},
 		{
+			name: "failed login is shown to the client",
+			err:  status.Error(codes.Unauthenticated, "invalid email or password"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Unauthorized",
+				Status: http.StatusUnauthorized,
+				Detail: new("invalid email or password"),
+			},
+		},
+		{
+			name: "conflict is shown to the client",
+			err:  status.Error(codes.AlreadyExists, "email is already registered"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Conflict",
+				Status: http.StatusConflict,
+				Detail: new("email is already registered"),
+			},
+		},
+		{
 			name: "internal failure is hidden from the client",
 			err:  status.Error(codes.Unavailable, "connection refused"),
 			want: api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},

@@ -135,6 +135,17 @@ k8s_resource(
     labels=['data'],
 )
 
+# The Ed25519 key Identity signs access tokens with, as PKCS #8 PEM. Generated once, so
+# tokens survive a restart; deleting the file rotates the key and invalidates them all.
+JWT_SIGNING_KEY = 'secrets/jwt-signing-key.pem'
+if not os.path.exists(JWT_SIGNING_KEY):
+    local('mkdir -p secrets && openssl genpkey -algorithm ed25519 -out %s' % JWT_SIGNING_KEY, quiet=True, echo_off=True)
+k8s_yaml(local(
+    'kubectl create secret generic jwt-signing-key --namespace ride-sharing --from-file signing-key.pem=%s --dry-run=client -o yaml' % JWT_SIGNING_KEY,
+    quiet=True,
+    echo_off=True,
+))
+
 
 def go_service(name, objects=[], resource_deps=[], links=[]):
     docker_build(
@@ -149,7 +160,7 @@ def go_service(name, objects=[], resource_deps=[], links=[]):
 
 go_service('pricing')
 # Its init container runs the migrations, so its database and role must exist first.
-go_service('identity', resource_deps=['identity-db'])
+go_service('identity', objects=['jwt-signing-key:secret'], resource_deps=['identity-db'])
 go_service(
     'edge',
     objects=['edge:httproute'],

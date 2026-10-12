@@ -14,7 +14,7 @@ import (
 	"github.com/pressly/goose/v3/lock"
 )
 
-// Postgres can still be starting on the first `tilt up` (ADR 0006), so migrate keeps
+// Postgres can still be starting on the first `tilt up`, so migrate keeps
 // trying to reach it for a while before it gives up.
 const (
 	databaseWaitTimeout = time.Minute
@@ -28,7 +28,7 @@ const (
 var embeddedMigrations embed.FS
 
 // migrate applies the migrations the database doesn't have yet. It runs as the
-// Deployment's init container, before the server starts (ADR 0007).
+// Deployment's init container, before the server starts.
 func migrate(ctx context.Context) error {
 	// goose needs a *sql.DB, so this uses pgx through database/sql. The empty
 	// connection string makes pgx read the standard PG* environment variables.

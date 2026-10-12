@@ -31,7 +31,7 @@ func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestO
 	if err != nil {
 		return nil, err
 	}
-	return api.RegisterUser201JSONResponse(user), nil
+	return api.RegisterUser201JSONResponse{Body: user}, nil
 }
 
 func (h *Handler) Login(ctx context.Context, req api.LoginRequestObject) (api.LoginResponseObject, error) {
@@ -49,7 +49,7 @@ func (h *Handler) Login(ctx context.Context, req api.LoginRequestObject) (api.Lo
 	if err != nil {
 		return nil, err
 	}
-	return api.Login200JSONResponse(user), nil
+	return api.Login200JSONResponse{Body: user}, nil
 }
 
 // The validator lets only rider and driver through. Anything else would reach

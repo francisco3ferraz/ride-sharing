@@ -46,7 +46,7 @@ paths:
   /v1/auth/register:
     post:
       operationId: registerUser
-      summary: Creates a rider or driver account.
+      summary: Creates a rider or driver account, and logs it in.
       description: A taken email gets a 409.
       security: []
       requestBody:
@@ -57,7 +57,10 @@ paths:
               $ref: "#/components/schemas/RegisterRequest"
       responses:
         "201":
-          description: The account was created.
+          description: The account was created, and its session started.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SessionCookies"
           content:
             application/json:
               schema:
@@ -73,7 +76,7 @@ paths:
   /v1/auth/login:
     post:
       operationId: login
-      summary: Checks an email and password, and returns their user.
+      summary: Checks an email and password, and starts a session for their user.
       description: >-
         An unknown email and a wrong password get the same 401, so the response doesn't
         reveal which emails are registered.
@@ -86,7 +89,10 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
       responses:
         "200":
-          description: The email and password match.
+          description: The email and password match, and the session started.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SessionCookies"
           content:
             application/json:
               schema:
@@ -101,6 +107,17 @@ paths:
           $ref: "#/components/responses/Problem"
 
 components:
+  headers:
+    # Optional on purpose. oapi-codegen writes a required header with Header().Set,
+    # which would replace the cookies the handler sets with http.SetCookie. Optional,
+    # its generated SetCookie field stays nil and the generated code writes nothing.
+    SessionCookies:
+      description: >-
+        Two HttpOnly cookies, in one Set-Cookie header each: the access token, sent with
+        every request and valid for 15 minutes, and the refresh token, sent only to
+        /v1/auth. JavaScript can't read either.
+      schema:
+        type: string
   responses:
     Problem:
       description: An error, in the RFC 9457 problem details format.

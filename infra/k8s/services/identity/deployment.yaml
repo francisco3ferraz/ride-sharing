@@ -106,6 +106,7 @@ spec:
             - name: postgres-ca
               mountPath: /etc/postgres-ca
               readOnly: true
+            # JWT_KEY_PATH's default in Identity's config points into this folder.
             - name: jwt-signing-key
               mountPath: /etc/jwt-signing-key
               readOnly: true

@@ -1,11 +1,15 @@
 syntax = "proto3";
 package ridesharing.identity.v1;
 
+import "google/protobuf/timestamp.proto";
+
 service IdentityService {
-  // Fails with INVALID_ARGUMENT for an empty email, a password that breaks the rule or
-  // an unspecified role, and ALREADY_EXISTS for a taken email.
+  // Creates a user and starts their session. Fails with INVALID_ARGUMENT for an empty
+  // email, a password that breaks the rule or an unspecified role, and ALREADY_EXISTS
+  // for a taken email.
   rpc Register(RegisterRequest) returns (RegisterResponse);
-  // Fails with UNAUTHENTICATED for an unknown email or a wrong password alike.
+  // Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
+  // wrong password alike.
   rpc Login(LoginRequest) returns (LoginResponse);
 }
 
@@ -21,6 +25,26 @@ message User {
   Role role = 3;
 }
 
+// A JWT signed with EdDSA. Whoever holds it can read its claims, so it carries nothing
+// private.
+message AccessToken {
+  string token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// An opaque random value. Identity stores only its SHA-256.
+message RefreshToken {
+  string token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// Both tokens are secrets: never log them. The Edge sets each as a cookie that lasts
+// until its expires_at.
+message Tokens {
+  AccessToken access_token = 1;
+  RefreshToken refresh_token = 2;
+}
+
 message RegisterRequest {
   string email = 1;
   string password = 2;
@@ -29,6 +53,7 @@ message RegisterRequest {
 
 message RegisterResponse {
   User user = 1;
+  Tokens tokens = 2;
 }
 
 message LoginRequest {
@@ -38,4 +63,5 @@ message LoginRequest {
 
 message LoginResponse {
   User user = 1;
+  Tokens tokens = 2;
 }

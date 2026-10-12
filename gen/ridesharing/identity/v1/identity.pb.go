@@ -9,6 +9,7 @@ package identityv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -130,6 +131,167 @@ func (x *User) GetRole() Role {
 	return Role_ROLE_UNSPECIFIED
 }
 
+// A JWT signed with EdDSA. Whoever holds it can read its claims, so it carries nothing
+// private.
+type AccessToken struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AccessToken) Reset() {
+	*x = AccessToken{}
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccessToken) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccessToken) ProtoMessage() {}
+
+func (x *AccessToken) ProtoReflect() protoreflect.Message {
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccessToken.ProtoReflect.Descriptor instead.
+func (*AccessToken) Descriptor() ([]byte, []int) {
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AccessToken) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *AccessToken) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+// An opaque random value. Identity stores only its SHA-256.
+type RefreshToken struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefreshToken) Reset() {
+	*x = RefreshToken{}
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefreshToken) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefreshToken) ProtoMessage() {}
+
+func (x *RefreshToken) ProtoReflect() protoreflect.Message {
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefreshToken.ProtoReflect.Descriptor instead.
+func (*RefreshToken) Descriptor() ([]byte, []int) {
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RefreshToken) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *RefreshToken) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+// Both tokens are secrets: never log them. The Edge sets each as a cookie that lasts
+// until its expires_at.
+type Tokens struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AccessToken   *AccessToken           `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	RefreshToken  *RefreshToken          `protobuf:"bytes,2,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Tokens) Reset() {
+	*x = Tokens{}
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Tokens) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Tokens) ProtoMessage() {}
+
+func (x *Tokens) ProtoReflect() protoreflect.Message {
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Tokens.ProtoReflect.Descriptor instead.
+func (*Tokens) Descriptor() ([]byte, []int) {
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Tokens) GetAccessToken() *AccessToken {
+	if x != nil {
+		return x.AccessToken
+	}
+	return nil
+}
+
+func (x *Tokens) GetRefreshToken() *RefreshToken {
+	if x != nil {
+		return x.RefreshToken
+	}
+	return nil
+}
+
 type RegisterRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
@@ -141,7 +303,7 @@ type RegisterRequest struct {
 
 func (x *RegisterRequest) Reset() {
 	*x = RegisterRequest{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[1]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -153,7 +315,7 @@ func (x *RegisterRequest) String() string {
 func (*RegisterRequest) ProtoMessage() {}
 
 func (x *RegisterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[1]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -166,7 +328,7 @@ func (x *RegisterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterRequest.ProtoReflect.Descriptor instead.
 func (*RegisterRequest) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{1}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RegisterRequest) GetEmail() string {
@@ -193,13 +355,14 @@ func (x *RegisterRequest) GetRole() Role {
 type RegisterResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	Tokens        *Tokens                `protobuf:"bytes,2,opt,name=tokens,proto3" json:"tokens,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterResponse) Reset() {
 	*x = RegisterResponse{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[2]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -211,7 +374,7 @@ func (x *RegisterResponse) String() string {
 func (*RegisterResponse) ProtoMessage() {}
 
 func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[2]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -224,12 +387,19 @@ func (x *RegisterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterResponse.ProtoReflect.Descriptor instead.
 func (*RegisterResponse) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{2}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RegisterResponse) GetUser() *User {
 	if x != nil {
 		return x.User
+	}
+	return nil
+}
+
+func (x *RegisterResponse) GetTokens() *Tokens {
+	if x != nil {
+		return x.Tokens
 	}
 	return nil
 }
@@ -244,7 +414,7 @@ type LoginRequest struct {
 
 func (x *LoginRequest) Reset() {
 	*x = LoginRequest{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[3]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -256,7 +426,7 @@ func (x *LoginRequest) String() string {
 func (*LoginRequest) ProtoMessage() {}
 
 func (x *LoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[3]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -269,7 +439,7 @@ func (x *LoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginRequest.ProtoReflect.Descriptor instead.
 func (*LoginRequest) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{3}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *LoginRequest) GetEmail() string {
@@ -289,13 +459,14 @@ func (x *LoginRequest) GetPassword() string {
 type LoginResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	Tokens        *Tokens                `protobuf:"bytes,2,opt,name=tokens,proto3" json:"tokens,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LoginResponse) Reset() {
 	*x = LoginResponse{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[4]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -307,7 +478,7 @@ func (x *LoginResponse) String() string {
 func (*LoginResponse) ProtoMessage() {}
 
 func (x *LoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[4]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -320,7 +491,7 @@ func (x *LoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginResponse.ProtoReflect.Descriptor instead.
 func (*LoginResponse) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{4}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *LoginResponse) GetUser() *User {
@@ -330,26 +501,46 @@ func (x *LoginResponse) GetUser() *User {
 	return nil
 }
 
+func (x *LoginResponse) GetTokens() *Tokens {
+	if x != nil {
+		return x.Tokens
+	}
+	return nil
+}
+
 var File_ridesharing_identity_v1_identity_proto protoreflect.FileDescriptor
 
 const file_ridesharing_identity_v1_identity_proto_rawDesc = "" +
 	"\n" +
-	"&ridesharing/identity/v1/identity.proto\x12\x17ridesharing.identity.v1\"_\n" +
+	"&ridesharing/identity/v1/identity.proto\x12\x17ridesharing.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"_\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x121\n" +
-	"\x04role\x18\x03 \x01(\x0e2\x1d.ridesharing.identity.v1.RoleR\x04role\"v\n" +
+	"\x04role\x18\x03 \x01(\x0e2\x1d.ridesharing.identity.v1.RoleR\x04role\"^\n" +
+	"\vAccessToken\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"_\n" +
+	"\fRefreshToken\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\x9d\x01\n" +
+	"\x06Tokens\x12G\n" +
+	"\faccess_token\x18\x01 \x01(\v2$.ridesharing.identity.v1.AccessTokenR\vaccessToken\x12J\n" +
+	"\rrefresh_token\x18\x02 \x01(\v2%.ridesharing.identity.v1.RefreshTokenR\frefreshToken\"v\n" +
 	"\x0fRegisterRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x121\n" +
-	"\x04role\x18\x03 \x01(\x0e2\x1d.ridesharing.identity.v1.RoleR\x04role\"E\n" +
+	"\x04role\x18\x03 \x01(\x0e2\x1d.ridesharing.identity.v1.RoleR\x04role\"~\n" +
 	"\x10RegisterResponse\x121\n" +
-	"\x04user\x18\x01 \x01(\v2\x1d.ridesharing.identity.v1.UserR\x04user\"@\n" +
+	"\x04user\x18\x01 \x01(\v2\x1d.ridesharing.identity.v1.UserR\x04user\x127\n" +
+	"\x06tokens\x18\x02 \x01(\v2\x1f.ridesharing.identity.v1.TokensR\x06tokens\"@\n" +
 	"\fLoginRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"B\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"{\n" +
 	"\rLoginResponse\x121\n" +
-	"\x04user\x18\x01 \x01(\v2\x1d.ridesharing.identity.v1.UserR\x04user*=\n" +
+	"\x04user\x18\x01 \x01(\v2\x1d.ridesharing.identity.v1.UserR\x04user\x127\n" +
+	"\x06tokens\x18\x02 \x01(\v2\x1f.ridesharing.identity.v1.TokensR\x06tokens*=\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vROLE_DRIVER\x10\x01\x12\x0e\n" +
@@ -373,29 +564,39 @@ func file_ridesharing_identity_v1_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_ridesharing_identity_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_ridesharing_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_ridesharing_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_ridesharing_identity_v1_identity_proto_goTypes = []any{
-	(Role)(0),                // 0: ridesharing.identity.v1.Role
-	(*User)(nil),             // 1: ridesharing.identity.v1.User
-	(*RegisterRequest)(nil),  // 2: ridesharing.identity.v1.RegisterRequest
-	(*RegisterResponse)(nil), // 3: ridesharing.identity.v1.RegisterResponse
-	(*LoginRequest)(nil),     // 4: ridesharing.identity.v1.LoginRequest
-	(*LoginResponse)(nil),    // 5: ridesharing.identity.v1.LoginResponse
+	(Role)(0),                     // 0: ridesharing.identity.v1.Role
+	(*User)(nil),                  // 1: ridesharing.identity.v1.User
+	(*AccessToken)(nil),           // 2: ridesharing.identity.v1.AccessToken
+	(*RefreshToken)(nil),          // 3: ridesharing.identity.v1.RefreshToken
+	(*Tokens)(nil),                // 4: ridesharing.identity.v1.Tokens
+	(*RegisterRequest)(nil),       // 5: ridesharing.identity.v1.RegisterRequest
+	(*RegisterResponse)(nil),      // 6: ridesharing.identity.v1.RegisterResponse
+	(*LoginRequest)(nil),          // 7: ridesharing.identity.v1.LoginRequest
+	(*LoginResponse)(nil),         // 8: ridesharing.identity.v1.LoginResponse
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_ridesharing_identity_v1_identity_proto_depIdxs = []int32{
-	0, // 0: ridesharing.identity.v1.User.role:type_name -> ridesharing.identity.v1.Role
-	0, // 1: ridesharing.identity.v1.RegisterRequest.role:type_name -> ridesharing.identity.v1.Role
-	1, // 2: ridesharing.identity.v1.RegisterResponse.user:type_name -> ridesharing.identity.v1.User
-	1, // 3: ridesharing.identity.v1.LoginResponse.user:type_name -> ridesharing.identity.v1.User
-	2, // 4: ridesharing.identity.v1.IdentityService.Register:input_type -> ridesharing.identity.v1.RegisterRequest
-	4, // 5: ridesharing.identity.v1.IdentityService.Login:input_type -> ridesharing.identity.v1.LoginRequest
-	3, // 6: ridesharing.identity.v1.IdentityService.Register:output_type -> ridesharing.identity.v1.RegisterResponse
-	5, // 7: ridesharing.identity.v1.IdentityService.Login:output_type -> ridesharing.identity.v1.LoginResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0,  // 0: ridesharing.identity.v1.User.role:type_name -> ridesharing.identity.v1.Role
+	9,  // 1: ridesharing.identity.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
+	9,  // 2: ridesharing.identity.v1.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
+	2,  // 3: ridesharing.identity.v1.Tokens.access_token:type_name -> ridesharing.identity.v1.AccessToken
+	3,  // 4: ridesharing.identity.v1.Tokens.refresh_token:type_name -> ridesharing.identity.v1.RefreshToken
+	0,  // 5: ridesharing.identity.v1.RegisterRequest.role:type_name -> ridesharing.identity.v1.Role
+	1,  // 6: ridesharing.identity.v1.RegisterResponse.user:type_name -> ridesharing.identity.v1.User
+	4,  // 7: ridesharing.identity.v1.RegisterResponse.tokens:type_name -> ridesharing.identity.v1.Tokens
+	1,  // 8: ridesharing.identity.v1.LoginResponse.user:type_name -> ridesharing.identity.v1.User
+	4,  // 9: ridesharing.identity.v1.LoginResponse.tokens:type_name -> ridesharing.identity.v1.Tokens
+	5,  // 10: ridesharing.identity.v1.IdentityService.Register:input_type -> ridesharing.identity.v1.RegisterRequest
+	7,  // 11: ridesharing.identity.v1.IdentityService.Login:input_type -> ridesharing.identity.v1.LoginRequest
+	6,  // 12: ridesharing.identity.v1.IdentityService.Register:output_type -> ridesharing.identity.v1.RegisterResponse
+	8,  // 13: ridesharing.identity.v1.IdentityService.Login:output_type -> ridesharing.identity.v1.LoginResponse
+	12, // [12:14] is the sub-list for method output_type
+	10, // [10:12] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_ridesharing_identity_v1_identity_proto_init() }
@@ -409,7 +610,7 @@ func file_ridesharing_identity_v1_identity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ridesharing_identity_v1_identity_proto_rawDesc), len(file_ridesharing_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

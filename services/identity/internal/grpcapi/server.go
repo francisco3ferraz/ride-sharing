@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/account"
@@ -16,8 +17,8 @@ import (
 
 // AccountService is what Server needs from *account.Service, so tests can replace it.
 type AccountService interface {
-	Register(ctx context.Context, email, pw string, role account.Role) (account.User, error)
-	Login(ctx context.Context, email, pw string) (account.User, error)
+	Register(ctx context.Context, email, pw string, role account.Role) (account.User, account.Tokens, error)
+	Login(ctx context.Context, email, pw string) (account.User, account.Tokens, error)
 }
 
 // Server implements identityv1.IdentityServiceServer.
@@ -41,19 +42,19 @@ func (s *Server) Register(ctx context.Context, req *identityv1.RegisterRequest) 
 		return nil, status.Error(codes.InvalidArgument, "role must be either rider or driver")
 	}
 
-	user, err := s.accounts.Register(ctx, req.GetEmail(), req.GetPassword(), role)
+	user, tokens, err := s.accounts.Register(ctx, req.GetEmail(), req.GetPassword(), role)
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return &identityv1.RegisterResponse{User: userToProto(user)}, nil
+	return &identityv1.RegisterResponse{User: userToProto(user), Tokens: tokensToProto(tokens)}, nil
 }
 
 func (s *Server) Login(ctx context.Context, req *identityv1.LoginRequest) (*identityv1.LoginResponse, error) {
-	user, err := s.accounts.Login(ctx, req.GetEmail(), req.GetPassword())
+	user, tokens, err := s.accounts.Login(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return &identityv1.LoginResponse{User: userToProto(user)}, nil
+	return &identityv1.LoginResponse{User: userToProto(user), Tokens: tokensToProto(tokens)}, nil
 }
 
 // toStatus maps errors to the codes in the proto's comments. A handler must never
@@ -106,5 +107,18 @@ func userToProto(user account.User) *identityv1.User {
 		Id:    user.ID.String(),
 		Email: user.Email,
 		Role:  roleToProto(user.Role),
+	}
+}
+
+func tokensToProto(tokens account.Tokens) *identityv1.Tokens {
+	return &identityv1.Tokens{
+		AccessToken: &identityv1.AccessToken{
+			Token:     tokens.Access.Value,
+			ExpiresAt: timestamppb.New(tokens.Access.ExpiresAt),
+		},
+		RefreshToken: &identityv1.RefreshToken{
+			Token:     tokens.Refresh.Value,
+			ExpiresAt: timestamppb.New(tokens.Refresh.ExpiresAt),
+		},
 	}
 }

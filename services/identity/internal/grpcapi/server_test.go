@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -19,27 +20,33 @@ import (
 
 var testID = uuid.MustParse("0199d3a2-7c41-7b1e-9f2a-3c5d8e6f1a2b")
 
-// fakeAccounts fails with err when it's set. Otherwise it returns a user built from its
-// arguments, so a test sees whether the role made it through both translations.
+var testTokens = account.Tokens{
+	Access:  account.Token{Value: "access-token", ExpiresAt: time.Date(2026, 10, 13, 9, 45, 0, 0, time.UTC)},
+	Refresh: account.Token{Value: "refresh-token", ExpiresAt: time.Date(2026, 10, 20, 9, 30, 0, 0, time.UTC)},
+}
+
+// fakeAccounts fails with err when it's set. Otherwise it returns testTokens and a user
+// built from its arguments, so a test sees whether the role made it through both
+// translations.
 type fakeAccounts struct {
 	err    error
 	called bool
 }
 
-func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, error) {
+func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, account.Tokens, error) {
 	f.called = true
 	if f.err != nil {
-		return account.User{}, f.err
+		return account.User{}, account.Tokens{}, f.err
 	}
-	return account.User{ID: testID, Email: email, Role: role}, nil
+	return account.User{ID: testID, Email: email, Role: role}, testTokens, nil
 }
 
-func (f *fakeAccounts) Login(_ context.Context, email, _ string) (account.User, error) {
+func (f *fakeAccounts) Login(_ context.Context, email, _ string) (account.User, account.Tokens, error) {
 	f.called = true
 	if f.err != nil {
-		return account.User{}, f.err
+		return account.User{}, account.Tokens{}, f.err
 	}
-	return account.User{ID: testID, Email: email, Role: account.RoleDriver}, nil
+	return account.User{ID: testID, Email: email, Role: account.RoleDriver}, testTokens, nil
 }
 
 func TestRegister(t *testing.T) {
@@ -57,6 +64,7 @@ func TestRegister(t *testing.T) {
 			assert.Equal(t, testID.String(), resp.GetUser().GetId())
 			assert.Equal(t, "ana@example.pt", resp.GetUser().GetEmail())
 			assert.Equal(t, role, resp.GetUser().GetRole())
+			assertTestTokens(t, resp.GetTokens())
 		})
 	}
 }
@@ -109,6 +117,7 @@ func TestLogin(t *testing.T) {
 	assert.Equal(t, testID.String(), resp.GetUser().GetId())
 	assert.Equal(t, "ana@example.pt", resp.GetUser().GetEmail())
 	assert.Equal(t, identityv1.Role_ROLE_DRIVER, resp.GetUser().GetRole())
+	assertTestTokens(t, resp.GetTokens())
 }
 
 // Both RPCs share the mapping, so each case runs through both.
@@ -158,4 +167,12 @@ func TestErrorCodes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func assertTestTokens(t *testing.T, got *identityv1.Tokens) {
+	t.Helper()
+	assert.Equal(t, testTokens.Access.Value, got.GetAccessToken().GetToken())
+	assert.Equal(t, testTokens.Access.ExpiresAt, got.GetAccessToken().GetExpiresAt().AsTime())
+	assert.Equal(t, testTokens.Refresh.Value, got.GetRefreshToken().GetToken())
+	assert.Equal(t, testTokens.Refresh.ExpiresAt, got.GetRefreshToken().GetExpiresAt().AsTime())
 }

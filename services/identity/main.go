@@ -14,9 +14,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
+	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/accesstoken"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/account"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/config"
-	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/db"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/grpcapi"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/password"
 	"github.com/francisco3ferraz/ride-sharing/shared/grpcserver"
@@ -64,13 +64,19 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	// A missing or bad key fails here, as a crashing pod, instead of failing every login.
+	key, err := accesstoken.LoadKey(cfg.JWTKeyPath)
+	if err != nil {
+		return err
+	}
+
 	pool, err := newPool(ctx)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	accounts := account.New(db.New(pool), password.New())
+	accounts := account.New(pool, password.New(), accesstoken.New(key, time.Now))
 
 	lis, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {

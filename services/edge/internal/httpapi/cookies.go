@@ -11,28 +11,24 @@ import (
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 )
 
-// The session cookies of ADR 0002. Protected routes will read the access token, and
-// refresh and logout the refresh token.
 const (
 	// The __Host- prefix makes the browser require Secure and Path=/ and refuse a
 	// Domain, so a sibling host can't plant or overwrite the cookie.
 	accessTokenCookie = "__Host-access_token"
-	// __Host- would need Path=/. __Secure- only makes the browser refuse the cookie
-	// from a plain-HTTP response; a sibling host can still set it.
+	// Not __Host-, which would need Path=/. __Secure- only stops a plain-HTTP response
+	// from setting it; a sibling host still can.
 	refreshTokenCookie = "__Secure-refresh_token"
 	// Refresh and logout must live under it, or the refresh cookie won't reach them.
 	refreshTokenPath = "/v1/auth"
 )
 
-// issuedToken is what AccessToken and RefreshToken have in common.
 type issuedToken interface {
 	GetToken() string
 	GetExpiresAt() *timestamppb.Timestamp
 }
 
-// sessionCookies turns the tokens Identity issued into the two cookies. Each lasts as
-// long as its token, so lifetimes stay Identity's to set. It fails only if Identity
-// breaks its contract, which becomes a 500.
+// Lifetimes come from the tokens, so they stay Identity's to set. It fails only if
+// Identity breaks its contract, which becomes a 500.
 func sessionCookies(tokens *identityv1.Tokens) ([]*http.Cookie, error) {
 	access, err := tokenCookie(accessTokenCookie, "/", http.SameSiteLaxMode, tokens.GetAccessToken())
 	if err != nil {
@@ -62,8 +58,7 @@ func tokenCookie(name, path string, sameSite http.SameSite, token issuedToken) (
 		Name:  name,
 		Value: token.GetToken(),
 		Path:  path,
-		// Counts from when the browser gets the cookie, so unlike Expires it doesn't
-		// depend on the browser's clock.
+		// Not Expires, which depends on the browser's clock.
 		MaxAge: maxAge,
 		// Always: Traefik terminates TLS, so the Edge itself only sees plain HTTP.
 		Secure:   true,

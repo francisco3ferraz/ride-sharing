@@ -61,10 +61,9 @@ func (h *Handler) Login(ctx context.Context, req api.LoginRequestObject) (api.Lo
 	return loginResponse{cookies: cookies, next: api.Login200JSONResponse{Body: user}}, nil
 }
 
-// Handlers never get the ResponseWriter, so these responses set the cookies themselves,
-// then hand off to the generated response, which writes the status and body. It's a
-// named field rather than embedded: embedded, its Visit method would be promoted, so a
-// misnamed method here would still compile and set no cookies.
+// Handlers never get the ResponseWriter, so the response sets the cookies. The
+// generated response isn't embedded: its Visit method would be promoted, so a misnamed
+// method here would still compile and set no cookies.
 type registerUserResponse struct {
 	cookies []*http.Cookie
 	next    api.RegisterUser201JSONResponse

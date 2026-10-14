@@ -1,7 +1,9 @@
 openapi: 3.0.4
 info:
   title: Ride-sharing API
-  description: The public REST API of the Lisbon ride-sharing app, served by the Edge.
+  description: >-
+    The public REST API of the Lisbon ride-sharing app, served by the Edge. A request
+    other than GET, HEAD or OPTIONS that a browser sends from another origin gets a 403.
   version: "1.0.0"
   license:
     name: MIT
@@ -67,6 +69,8 @@ paths:
                 $ref: "#/components/schemas/User"
         "400":
           $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
         "409":
           $ref: "#/components/responses/Problem"
         "413":
@@ -100,6 +104,8 @@ paths:
         "400":
           $ref: "#/components/responses/Problem"
         "401":
+          $ref: "#/components/responses/Problem"
+        "403":
           $ref: "#/components/responses/Problem"
         "413":
           $ref: "#/components/responses/Problem"

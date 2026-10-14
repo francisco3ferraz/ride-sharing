@@ -48,12 +48,25 @@ func (h *Handler) Routes() (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.Handle("/v1/", limitBody(validate(apiMux)))
+	mux.Handle("/v1/", rejectCrossOrigin(limitBody(validate(apiMux))))
 
 	return otelhttp.NewHandler(mux, "edge",
 		// Kubernetes probes /healthz every few seconds; those spans would flood Jaeger.
 		otelhttp.WithFilter(func(r *http.Request) bool { return r.URL.Path != "/healthz" }),
 	), nil
+}
+
+// It goes outside limitBody, so a refused request's body is never read. A request with
+// neither Sec-Fetch-Site nor Origin passes: only clients that aren't browsers send
+// those, and they carry no victim's cookies.
+func rejectCrossOrigin(next http.Handler) http.Handler {
+	protection := http.NewCrossOriginProtection()
+	protection.SetDenyHandler(http.HandlerFunc(crossOriginDenied))
+	return protection.Handler(next)
+}
+
+func crossOriginDenied(w http.ResponseWriter, _ *http.Request) {
+	writeProblem(w, http.StatusForbidden, "cross-origin requests aren't allowed")
 }
 
 // limitBody answers 413 for a body over maxBodyBytes. It reads the body before the

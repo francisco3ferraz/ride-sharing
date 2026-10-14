@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -50,7 +51,6 @@ func (f *fakeIdentity) Login(_ context.Context, req *identityv1.LoginRequest, _ 
 	return &identityv1.LoginResponse{User: f.user, Tokens: f.tokens}, nil
 }
 
-// testTokens are what Identity issues at login, with ADR 0002's lifetimes.
 func testTokens() *identityv1.Tokens {
 	now := time.Now()
 	return &identityv1.Tokens{
@@ -59,7 +59,6 @@ func testTokens() *identityv1.Tokens {
 	}
 }
 
-// brokenTokens returns testTokens with one part broken by breakIt.
 func brokenTokens(breakIt func(*identityv1.Tokens)) *identityv1.Tokens {
 	tokens := testTokens()
 	breakIt(tokens)
@@ -273,9 +272,8 @@ func TestAuthRejectsBrokenIdentityResponses(t *testing.T) {
 	}
 }
 
-// assertSessionCookies checks both cookies against ADR 0002. Go doesn't enforce the
-// __Host- rules, but the browser silently drops a cookie that breaks them, so every
-// attribute is checked here.
+// Go doesn't enforce the __Host- rules, but the browser silently drops a cookie that
+// breaks them, so every attribute is checked.
 func assertSessionCookies(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	want := []struct {
@@ -314,10 +312,16 @@ func assertSessionCookies(t *testing.T, rec *httptest.ResponseRecorder) {
 // the validator too.
 func post(t *testing.T, identity identityv1.IdentityServiceClient, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postWithHeader(t, identity, target, body, nil)
+}
+
+func postWithHeader(t *testing.T, identity identityv1.IdentityServiceClient, target, body string, header http.Header) *httptest.ResponseRecorder {
+	t.Helper()
 	routes, err := NewHandler(nil, identity).Routes()
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))
+	maps.Copy(req.Header, header)
 	// Without it the validator answers 400 before any handler runs.
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

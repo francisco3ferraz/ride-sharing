@@ -10,7 +10,7 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	// Setenv restores each variable after the test, so it's safe to unset it here.
-	for _, name := range []string{"LISTEN_ADDR", "JWT_KEY_PATH"} {
+	for _, name := range []string{"LISTEN_ADDR", "HTTP_LISTEN_ADDR", "JWT_KEY_PATH"} {
 		t.Setenv(name, "")
 		require.NoError(t, os.Unsetenv(name))
 	}
@@ -19,17 +19,20 @@ func TestLoadDefaults(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, ":50052", cfg.ListenAddr)
+	assert.Equal(t, ":8080", cfg.HTTPListenAddr)
 	// Where the Deployment mounts the jwt-signing-key Secret.
 	assert.Equal(t, "/etc/jwt-signing-key/signing-key.pem", cfg.JWTKeyPath)
 }
 
 func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("LISTEN_ADDR", ":9000")
+	t.Setenv("HTTP_LISTEN_ADDR", ":9001")
 	t.Setenv("JWT_KEY_PATH", "/tmp/signing-key.pem")
 
 	cfg, err := Load()
 
 	require.NoError(t, err)
 	assert.Equal(t, ":9000", cfg.ListenAddr)
+	assert.Equal(t, ":9001", cfg.HTTPListenAddr)
 	assert.Equal(t, "/tmp/signing-key.pem", cfg.JWTKeyPath)
 }

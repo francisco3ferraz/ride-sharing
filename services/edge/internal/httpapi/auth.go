@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,7 +32,11 @@ func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestO
 	if err != nil {
 		return nil, err
 	}
-	return api.RegisterUser201JSONResponse{Body: user}, nil
+	cookies, err := sessionCookies(resp.GetTokens())
+	if err != nil {
+		return nil, err
+	}
+	return registerUserResponse{cookies: cookies, next: api.RegisterUser201JSONResponse{Body: user}}, nil
 }
 
 func (h *Handler) Login(ctx context.Context, req api.LoginRequestObject) (api.LoginResponseObject, error) {
@@ -49,7 +54,35 @@ func (h *Handler) Login(ctx context.Context, req api.LoginRequestObject) (api.Lo
 	if err != nil {
 		return nil, err
 	}
-	return api.Login200JSONResponse{Body: user}, nil
+	cookies, err := sessionCookies(resp.GetTokens())
+	if err != nil {
+		return nil, err
+	}
+	return loginResponse{cookies: cookies, next: api.Login200JSONResponse{Body: user}}, nil
+}
+
+// Handlers never get the ResponseWriter, so these responses set the cookies themselves,
+// then hand off to the generated response, which writes the status and body. It's a
+// named field rather than embedded: embedded, its Visit method would be promoted, so a
+// misnamed method here would still compile and set no cookies.
+type registerUserResponse struct {
+	cookies []*http.Cookie
+	next    api.RegisterUser201JSONResponse
+}
+
+func (r registerUserResponse) VisitRegisterUserResponse(w http.ResponseWriter) error {
+	setCookies(w, r.cookies)
+	return r.next.VisitRegisterUserResponse(w)
+}
+
+type loginResponse struct {
+	cookies []*http.Cookie
+	next    api.Login200JSONResponse
+}
+
+func (r loginResponse) VisitLoginResponse(w http.ResponseWriter) error {
+	setCookies(w, r.cookies)
+	return r.next.VisitLoginResponse(w)
 }
 
 // The validator lets only rider and driver through. Anything else would reach

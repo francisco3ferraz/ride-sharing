@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"io/fs"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -75,6 +77,40 @@ func TestSignedTokenVerification(t *testing.T) {
 			assert.ErrorIs(t, err, tt.wantErr)
 		})
 	}
+}
+
+// Read with keyfunc, the library the Edge caches the JWKS with, so this fails if the
+// kid or the key's encoding stops matching what the Edge expects.
+func TestJWKSVerifiesSignedTokens(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	signer := New(key, func() time.Time { return signedAt })
+	signed, _, err := signer.Sign(uuid.New(), "rider")
+	require.NoError(t, err)
+
+	jwks, err := signer.JWKS()
+	require.NoError(t, err)
+	keys, err := keyfunc.NewJWKSetJSON(jwks)
+	require.NoError(t, err)
+
+	_, err = jwt.ParseWithClaims(signed, &Claims{}, keys.Keyfunc, verifyAt(signedAt)...)
+	assert.NoError(t, err)
+}
+
+func TestJWKSHoldsOnlyThePublicKey(t *testing.T) {
+	_, key, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+
+	jwks, err := New(key, time.Now).JWKS()
+	require.NoError(t, err)
+
+	var set struct {
+		Keys []map[string]string `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(jwks, &set))
+	require.Len(t, set.Keys, 1)
+	assert.NotContains(t, set.Keys[0], "d")
+	assert.Equal(t, base64.RawURLEncoding.EncodeToString(key.Public().(ed25519.PublicKey)), set.Keys[0]["x"])
 }
 
 // The example key and its thumbprint from RFC 8037, appendix A.

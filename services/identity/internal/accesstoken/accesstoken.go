@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -81,6 +82,41 @@ func (s *Signer) Sign(userID uuid.UUID, role string) (string, time.Time, error) 
 		return "", time.Time{}, fmt.Errorf("sign access token: %w", err)
 	}
 	return signed, expiresAt, nil
+}
+
+// jwk is an Ed25519 public key in the JWK format (RFC 8037). It must never get a "d"
+// member: that's the private key.
+type jwk struct {
+	Kty string `json:"kty"`
+	Crv string `json:"crv"`
+	X   string `json:"x"`
+	Kid string `json:"kid"`
+	// The Edge's key cache rejects a token whose alg differs from its key's.
+	Alg string `json:"alg"`
+	Use string `json:"use"`
+}
+
+// JWKS returns the JSON Web Key Set the Edge verifies this signer's tokens with. It's
+// always a set, because a key rotation publishes two keys.
+func (s *Signer) JWKS() ([]byte, error) {
+	pub := s.key.Public().(ed25519.PublicKey)
+	set := struct {
+		Keys []jwk `json:"keys"`
+	}{
+		Keys: []jwk{{
+			Kty: "OKP",
+			Crv: "Ed25519",
+			X:   base64.RawURLEncoding.EncodeToString(pub),
+			Kid: s.kid,
+			Alg: "EdDSA",
+			Use: "sig",
+		}},
+	}
+	jwks, err := json.Marshal(set)
+	if err != nil {
+		return nil, fmt.Errorf("marshal jwks: %w", err)
+	}
+	return jwks, nil
 }
 
 // keyID returns the key's RFC 7638 thumbprint: the SHA-256 of its public JWK's required

@@ -19,7 +19,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       # Applies the migrations before the app container starts, in every new pod
-      # (ADR 0007). If it fails, the pod never starts and the old one keeps serving.
+      # If it fails, the pod never starts and the old one keeps serving.
       initContainers:
         - name: migrate
           image: identity # the same image as the app, so code and schema match

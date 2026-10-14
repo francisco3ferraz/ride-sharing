@@ -1,6 +1,6 @@
 // Package refreshtoken makes refresh tokens: opaque random values that the client holds
 // and Identity stores only as SHA-256 hashes, so a database leak exposes no working
-// token. A fast hash is enough because 256 random bits can't be guessed (ADR 0003).
+// token. A fast hash is enough because 256 random bits can't be guessed.
 package refreshtoken
 
 import (

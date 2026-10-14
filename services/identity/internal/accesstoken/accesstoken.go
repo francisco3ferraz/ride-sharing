@@ -1,5 +1,5 @@
 // Package accesstoken signs access tokens: JWTs signed with Ed25519 (EdDSA), which the
-// Edge verifies by itself with the public key (ADR 0002). It knows nothing about users
+// Edge verifies by itself with the public key. It knows nothing about users
 // beyond an ID and a role, so the account package can depend on it.
 package accesstoken
 

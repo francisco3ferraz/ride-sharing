@@ -65,9 +65,14 @@ spec:
           ports:
             - name: grpc
               containerPort: 50052
+            # Serves only the JWKS, for the Edge. No HTTPRoute points here.
+            - name: http
+              containerPort: 8080
           env:
             - name: LISTEN_ADDR
               value: ":50052"
+            - name: HTTP_LISTEN_ADDR
+              value: ":8080"
             # Standard OpenTelemetry variables, read by the Go SDK itself.
             - name: OTEL_SERVICE_NAME
               value: identity

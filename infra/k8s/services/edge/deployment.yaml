@@ -31,6 +31,8 @@ spec:
               value: "pricing:50051"
             - name: IDENTITY_ADDR
               value: "identity:50052"
+            - name: IDENTITY_JWKS_URL
+              value: "http://identity:8080/.well-known/jwks.json"
             # Standard OpenTelemetry variables, read by the Go SDK itself.
             - name: OTEL_SERVICE_NAME
               value: edge

@@ -104,6 +104,20 @@ func TestService(t *testing.T) {
 		assert.Equal(t, 1, countSessions(t, pool, user.ID))
 	})
 
+	t.Run("get a registered user", func(t *testing.T) {
+		registered, _, err := svc.Register(ctx, "gabriel@example.pt", testPassword, RoleDriver)
+		require.NoError(t, err)
+
+		got, err := svc.GetUser(ctx, registered.ID)
+		require.NoError(t, err)
+		assert.Equal(t, registered, got)
+	})
+
+	t.Run("get an unknown user", func(t *testing.T) {
+		_, err := svc.GetUser(ctx, uuid.New())
+		assert.ErrorIs(t, err, ErrUserNotFound)
+	})
+
 	// Rotation reuses the refresh token query on old sessions. One that Register or Login
 	// has just created never reaches the cap.
 	t.Run("a refresh token never outlives its session's 30 days", func(t *testing.T) {

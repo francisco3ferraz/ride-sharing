@@ -45,6 +45,7 @@ type Tokens struct {
 var (
 	ErrEmailTaken         = errors.New("email is already registered")
 	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrUserNotFound       = errors.New("user not found")
 )
 
 const uniqueViolation = "23505"
@@ -137,6 +138,18 @@ func (s *Service) Login(ctx context.Context, email, pw string) (User, Tokens, er
 		return User{}, Tokens{}, err
 	}
 	return user, tokens, nil
+}
+
+func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {
+	row, err := s.queries.GetUserByID(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("get user: %w", err)
+	}
+
+	return User{ID: row.ID, Email: row.Email, Role: Role(row.Role)}, nil
 }
 
 // inTx runs fn in a transaction. fn must make every query through q: s.queries runs on

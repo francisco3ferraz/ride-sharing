@@ -9,7 +9,9 @@ RETURNING id;
 -- name: CreateRefreshToken :one
 -- Expires 7 days from now, but never past 30 days from the session's start.
 -- The start is read from the session row, so rotation can reuse this query. With no
--- such session, nothing is inserted and the query returns pgx.ErrNoRows.
+-- such live session, nothing is inserted and the query returns pgx.ErrNoRows. That
+-- alone doesn't stop a concurrent revocation, which this statement wouldn't see, so
+-- rotation locks the session first.
 INSERT INTO refresh_tokens (
   token_hash, session_id, expires_at
 )
@@ -18,5 +20,5 @@ SELECT
   id,
   LEAST(now() + interval '7 days', created_at + interval '30 days')
 FROM sessions
-WHERE id = sqlc.arg(session_id)
+WHERE id = sqlc.arg(session_id) AND revoked_at IS NULL
 RETURNING expires_at;

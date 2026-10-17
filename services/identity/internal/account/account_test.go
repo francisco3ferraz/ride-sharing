@@ -142,6 +142,21 @@ func TestService(t *testing.T) {
 		_, err := db.New(pool).CreateRefreshToken(ctx, db.CreateRefreshTokenParams{TokenHash: hash[:], SessionID: uuid.New()})
 		assert.ErrorIs(t, err, pgx.ErrNoRows)
 	})
+
+	t.Run("a refresh token needs a session that isn't revoked", func(t *testing.T) {
+		user, _, err := svc.Register(ctx, "helena@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		var sessionID uuid.UUID
+		err = pool.QueryRow(ctx, `
+			INSERT INTO sessions (user_id, revoked_at) VALUES ($1, now())
+			RETURNING id`, user.ID).Scan(&sessionID)
+		require.NoError(t, err)
+
+		_, hash := refreshtoken.Generate()
+		_, err = db.New(pool).CreateRefreshToken(ctx, db.CreateRefreshTokenParams{TokenHash: hash[:], SessionID: sessionID})
+		assert.ErrorIs(t, err, pgx.ErrNoRows)
+	})
 }
 
 // assertTokens checks that the access token verifies as the Edge will verify it, and that

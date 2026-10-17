@@ -11,3 +11,7 @@ INSERT INTO users (
   $1, $2, $3
 )
 RETURNING id;
+
+-- name: GetUserByID :one
+SELECT id, email, role FROM users
+WHERE id = $1;

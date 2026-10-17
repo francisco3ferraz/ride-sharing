@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	IdentityService_Register_FullMethodName = "/ridesharing.identity.v1.IdentityService/Register"
 	IdentityService_Login_FullMethodName    = "/ridesharing.identity.v1.IdentityService/Login"
+	IdentityService_GetUser_FullMethodName  = "/ridesharing.identity.v1.IdentityService/GetUser"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -34,6 +35,10 @@ type IdentityServiceClient interface {
 	// Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
 	// wrong password alike.
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
+	// Returns the user with the given ID. Fails with INVALID_ARGUMENT for an ID that isn't
+	// a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
+	// pass only an ID they've authenticated, such as a verified access token's subject.
+	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*GetUserResponse, error)
 }
 
 type identityServiceClient struct {
@@ -64,6 +69,16 @@ func (c *identityServiceClient) Login(ctx context.Context, in *LoginRequest, opt
 	return out, nil
 }
 
+func (c *identityServiceClient) GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*GetUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserResponse)
+	err := c.cc.Invoke(ctx, IdentityService_GetUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations must embed UnimplementedIdentityServiceServer
 // for forward compatibility.
@@ -75,6 +90,10 @@ type IdentityServiceServer interface {
 	// Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
 	// wrong password alike.
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
+	// Returns the user with the given ID. Fails with INVALID_ARGUMENT for an ID that isn't
+	// a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
+	// pass only an ID they've authenticated, such as a verified access token's subject.
+	GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error)
 	mustEmbedUnimplementedIdentityServiceServer()
 }
 
@@ -90,6 +109,9 @@ func (UnimplementedIdentityServiceServer) Register(context.Context, *RegisterReq
 }
 func (UnimplementedIdentityServiceServer) Login(context.Context, *LoginRequest) (*LoginResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Login not implemented")
+}
+func (UnimplementedIdentityServiceServer) GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUser not implemented")
 }
 func (UnimplementedIdentityServiceServer) mustEmbedUnimplementedIdentityServiceServer() {}
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue()                         {}
@@ -148,6 +170,24 @@ func _IdentityService_Login_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_GetUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).GetUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_GetUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).GetUser(ctx, req.(*GetUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IdentityService_ServiceDesc is the grpc.ServiceDesc for IdentityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -162,6 +202,10 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Login",
 			Handler:    _IdentityService_Login_Handler,
+		},
+		{
+			MethodName: "GetUser",
+			Handler:    _IdentityService_GetUser_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

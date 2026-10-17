@@ -11,6 +11,10 @@ service IdentityService {
   // Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
   // wrong password alike.
   rpc Login(LoginRequest) returns (LoginResponse);
+  // Returns the user with the given ID. Fails with INVALID_ARGUMENT for an ID that isn't
+  // a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
+  // pass only an ID they've authenticated, such as a verified access token's subject.
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
 }
 
 enum Role {
@@ -64,4 +68,12 @@ message LoginRequest {
 message LoginResponse {
   User user = 1;
   Tokens tokens = 2;
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
 }

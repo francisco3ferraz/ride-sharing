@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -19,6 +20,7 @@ import (
 type AccountService interface {
 	Register(ctx context.Context, email, pw string, role account.Role) (account.User, account.Tokens, error)
 	Login(ctx context.Context, email, pw string) (account.User, account.Tokens, error)
+	GetUser(ctx context.Context, userID uuid.UUID) (account.User, error)
 }
 
 // Server implements identityv1.IdentityServiceServer.
@@ -57,6 +59,21 @@ func (s *Server) Login(ctx context.Context, req *identityv1.LoginRequest) (*iden
 	return &identityv1.LoginResponse{User: userToProto(user), Tokens: tokensToProto(tokens)}, nil
 }
 
+func (s *Server) GetUser(ctx context.Context, req *identityv1.GetUserRequest) (*identityv1.GetUserResponse, error) {
+	// Not uuid's own error, which describes its parser ("invalid UUID length: 1"), and
+	// INVALID_ARGUMENT messages are shown to the caller.
+	userID, err := uuid.Parse(req.GetUserId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
+	}
+
+	user, err := s.accounts.GetUser(ctx, userID)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &identityv1.GetUserResponse{User: userToProto(user)}, nil
+}
+
 // toStatus maps errors to the codes in the proto's comments. A handler must never
 // return a plain error, or a nil response with a nil error, which gRPC sends as OK.
 func toStatus(err error) error {
@@ -68,6 +85,8 @@ func toStatus(err error) error {
 		return status.Error(codes.AlreadyExists, err.Error())
 	case errors.Is(err, account.ErrInvalidCredentials):
 		return status.Error(codes.Unauthenticated, err.Error())
+	case errors.Is(err, account.ErrUserNotFound):
+		return status.Error(codes.NotFound, err.Error())
 	// The caller gave up, for example while waiting for a hashing slot. Not our fault.
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()

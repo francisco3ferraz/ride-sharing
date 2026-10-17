@@ -49,6 +49,14 @@ func (f *fakeAccounts) Login(_ context.Context, email, _ string) (account.User, 
 	return account.User{ID: testID, Email: email, Role: account.RoleDriver}, testTokens, nil
 }
 
+func (f *fakeAccounts) GetUser(_ context.Context, userID uuid.UUID) (account.User, error) {
+	f.called = true
+	if f.err != nil {
+		return account.User{}, f.err
+	}
+	return account.User{ID: userID, Email: "ana@example.pt", Role: account.RoleRider}, nil
+}
+
 func TestRegister(t *testing.T) {
 	for _, role := range []identityv1.Role{identityv1.Role_ROLE_RIDER, identityv1.Role_ROLE_DRIVER} {
 		t.Run(role.String(), func(t *testing.T) {
@@ -120,7 +128,42 @@ func TestLogin(t *testing.T) {
 	assertTestTokens(t, resp.GetTokens())
 }
 
-// Both RPCs share the mapping, so each case runs through both.
+func TestGetUser(t *testing.T) {
+	srv := New(&fakeAccounts{})
+
+	resp, err := srv.GetUser(context.Background(), &identityv1.GetUserRequest{UserId: testID.String()})
+
+	require.NoError(t, err)
+	assert.Equal(t, testID.String(), resp.GetUser().GetId())
+	assert.Equal(t, "ana@example.pt", resp.GetUser().GetEmail())
+	assert.Equal(t, identityv1.Role_ROLE_RIDER, resp.GetUser().GetRole())
+}
+
+func TestGetUserRejectsMalformedIDs(t *testing.T) {
+	tests := []struct {
+		name   string
+		userID string
+	}{
+		{name: "empty", userID: ""},
+		{name: "not a uuid", userID: "x"},
+		{name: "cut short", userID: "0199d3a2-7c41-7b1e-9f2a"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			accounts := &fakeAccounts{}
+			srv := New(accounts)
+
+			_, err := srv.GetUser(context.Background(), &identityv1.GetUserRequest{UserId: tt.userID})
+
+			assert.Equal(t, codes.InvalidArgument, status.Code(err))
+			assert.Equal(t, "user_id must be a UUID", status.Convert(err).Message())
+			assert.False(t, accounts.called)
+		})
+	}
+}
+
+// Every RPC shares the mapping, so each case runs through all of them.
 func TestErrorCodes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -134,6 +177,7 @@ func TestErrorCodes(t *testing.T) {
 		},
 		{name: "email taken", err: account.ErrEmailTaken, want: codes.AlreadyExists},
 		{name: "invalid credentials", err: account.ErrInvalidCredentials, want: codes.Unauthenticated},
+		{name: "no such user", err: account.ErrUserNotFound, want: codes.NotFound},
 		{
 			name: "caller cancelled",
 			err:  fmt.Errorf("wait for hashing slot: %w", context.Canceled),
@@ -160,8 +204,9 @@ func TestErrorCodes(t *testing.T) {
 				Email:    "ana@example.pt",
 				Password: "a long enough password",
 			})
+			_, getUserErr := srv.GetUser(context.Background(), &identityv1.GetUserRequest{UserId: testID.String()})
 
-			for _, err := range []error{registerErr, loginErr} {
+			for _, err := range []error{registerErr, loginErr, getUserErr} {
 				assert.Equal(t, tt.want, status.Code(err))
 				assert.Equal(t, tt.err.Error(), status.Convert(err).Message())
 			}

@@ -57,3 +57,82 @@ func (q *Queries) CreateSession(ctx context.Context, userID uuid.UUID) (uuid.UUI
 	err := row.Scan(&id)
 	return id, err
 }
+
+const getRefreshTokenForUpdate = `-- name: GetRefreshTokenForUpdate :one
+SELECT
+  t.session_id,
+  s.user_id,
+  -- So a role change applies at the next refresh.
+  u.role,
+  -- The casts are for sqlc, which types IS NOT NULL as interface{}.
+  (t.used_at IS NOT NULL)::bool AS used,
+  -- By Postgres's clock, which also set expires_at.
+  t.expires_at <= now() AS expired,
+  (s.revoked_at IS NOT NULL)::bool AS revoked
+FROM refresh_tokens t
+JOIN sessions s ON s.id = t.session_id
+JOIN users u ON u.id = s.user_id
+WHERE t.token_hash = $1
+FOR NO KEY UPDATE OF t, s
+`
+
+type GetRefreshTokenForUpdateRow struct {
+	SessionID uuid.UUID
+	UserID    uuid.UUID
+	Role      string
+	Used      bool
+	Expired   bool
+	Revoked   bool
+}
+
+// Run it in a transaction: the locks make rotations and revocations of the session wait
+// for each other, and outside one they end with the statement. The token's row is
+// locked too because a statement that waited for a lock re-reads only the rows it
+// locked, so the second of two concurrent refreshes would see the token unused. The
+// user's row isn't, or all of their sessions would wait for each other. NO KEY UPDATE
+// is the lock the UPDATEs that follow take anyway.
+func (q *Queries) GetRefreshTokenForUpdate(ctx context.Context, tokenHash []byte) (GetRefreshTokenForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getRefreshTokenForUpdate, tokenHash)
+	var i GetRefreshTokenForUpdateRow
+	err := row.Scan(
+		&i.SessionID,
+		&i.UserID,
+		&i.Role,
+		&i.Used,
+		&i.Expired,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const markRefreshTokenUsed = `-- name: MarkRefreshTokenUsed :exec
+UPDATE refresh_tokens SET used_at = now()
+WHERE token_hash = $1
+`
+
+func (q *Queries) MarkRefreshTokenUsed(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.Exec(ctx, markRefreshTokenUsed, tokenHash)
+	return err
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+UPDATE sessions SET revoked_at = now()
+WHERE id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeSession(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeSession, id)
+	return err
+}
+
+const revokeSessionByRefreshToken = `-- name: RevokeSessionByRefreshToken :exec
+UPDATE sessions SET revoked_at = now()
+WHERE id = (SELECT session_id FROM refresh_tokens WHERE token_hash = $1)
+  AND revoked_at IS NULL
+`
+
+// The UPDATE waits for a rotation in progress, so the token it issues is revoked too.
+func (q *Queries) RevokeSessionByRefreshToken(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.Exec(ctx, revokeSessionByRefreshToken, tokenHash)
+	return err
+}

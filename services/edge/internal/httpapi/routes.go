@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3filter"
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
@@ -33,6 +34,7 @@ func (h *Handler) Routes() (http.Handler, error) {
 		return nil, fmt.Errorf("load openapi spec: %w", err)
 	}
 	validate := nethttpmiddleware.OapiRequestValidatorWithOptions(spec, &nethttpmiddleware.Options{
+		Options: openapi3filter.Options{AuthenticationFunc: requireClaims},
 		// The spec's server is https://, but Traefik sends us plain HTTP.
 		DoNotValidateServers: true,
 		ErrorHandler:         validationError,
@@ -48,7 +50,7 @@ func (h *Handler) Routes() (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.Handle("/v1/", rejectCrossOrigin(limitBody(validate(apiMux))))
+	mux.Handle("/v1/", rejectCrossOrigin(h.authenticate(limitBody(validate(apiMux)))))
 
 	return otelhttp.NewHandler(mux, "edge",
 		// Kubernetes probes /healthz every few seconds; those spans would flood Jaeger.

@@ -13,6 +13,11 @@ servers:
   - url: https://ride-sharing.localhost
     description: The local cluster, through Traefik
 
+# Every operation needs the access token unless it declares `security: []`, so a route
+# that forgets to opt out answers 401 instead of being open by mistake.
+security:
+  - CookieAuth: []
+
 paths:
   /v1/fare-estimate:
     get:
@@ -124,6 +129,12 @@ components:
         /v1/auth. JavaScript can't read either.
       schema:
         type: string
+  securitySchemes:
+    CookieAuth:
+      description: The access token, which register and login set as an HttpOnly cookie.
+      type: apiKey
+      in: cookie
+      name: __Host-access_token
   responses:
     Problem:
       description: An error, in the RFC 9457 problem details format.

@@ -326,7 +326,7 @@ func post(t *testing.T, identity identityv1.IdentityServiceClient, target, body 
 
 func postWithHeader(t *testing.T, identity identityv1.IdentityServiceClient, target, body string, header http.Header) *httptest.ResponseRecorder {
 	t.Helper()
-	routes, err := NewHandler(nil, identity).Routes()
+	routes, err := NewHandler(nil, identity, nil).Routes()
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))

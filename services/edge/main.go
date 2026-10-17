@@ -17,6 +17,7 @@ import (
 
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	pricingv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/pricing/v1"
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/accesstoken"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/config"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/httpapi"
 	"github.com/francisco3ferraz/ride-sharing/shared/telemetry"
@@ -70,9 +71,17 @@ func run() error {
 	}
 	defer closeConn(identityConn, "identity")
 
+	// ctx ends at SIGTERM, which stops the background refresh while the server drains.
+	// That's fine: the keys already fetched stay usable.
+	verifier, err := accesstoken.New(ctx, cfg.IdentityJWKSURL)
+	if err != nil {
+		return fmt.Errorf("create access token verifier: %w", err)
+	}
+
 	handler := httpapi.NewHandler(
 		pricingv1.NewPricingServiceClient(pricingConn),
 		identityv1.NewIdentityServiceClient(identityConn),
+		verifier,
 	)
 	routes, err := handler.Routes()
 	if err != nil {

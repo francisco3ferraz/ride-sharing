@@ -116,6 +116,24 @@ paths:
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/Problem"
+  /v1/me:
+    get:
+      operationId: getMe
+      summary: Returns the logged-in user.
+      description: >-
+        The user is the access token's, so there's nothing to send but the cookie. A
+        missing, invalid or expired access token gets a 401.
+      responses:
+        "200":
+          description: The user the access token belongs to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
 
 components:
   headers:

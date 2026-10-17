@@ -12,8 +12,8 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 )
 
-// Identity hashes a password on every call and limits how many hashes run at once, so
-// in a burst of logins requests wait their turn.
+// Register and login hash a password, and Identity limits how many hashes run at once,
+// so in a burst of logins requests wait their turn.
 const identityTimeout = 2 * time.Second
 
 func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestObject) (api.RegisterUserResponseObject, error) {

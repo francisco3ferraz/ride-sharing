@@ -113,6 +113,9 @@ type ServerInterface interface {
 	// GetFareEstimate Returns an estimate of a ride.
 	// (GET /v1/fare-estimate)
 	GetFareEstimate(w http.ResponseWriter, r *http.Request, params GetFareEstimateParams)
+	// GetMe Returns the logged-in user.
+	// (GET /v1/me)
+	GetMe(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -189,6 +192,20 @@ func (siw *ServerInterfaceWrapper) GetFareEstimate(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFareEstimate(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMe operation middleware
+func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMe(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -321,6 +338,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/fare-estimate", wrapper.GetFareEstimate)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/register", wrapper.RegisterUser)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/login", wrapper.Login)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
 
 	return m
 }
@@ -587,6 +605,57 @@ func (response GetFareEstimate500ApplicationProblemPlusJSONResponse) VisitGetFar
 	return err
 }
 
+type GetMeRequestObject struct {
+}
+
+type GetMeResponseObject interface {
+	VisitGetMeResponse(w http.ResponseWriter) error
+}
+
+type GetMe200JSONResponse User
+
+func (response GetMe200JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMe401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMe401ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMe500ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMe500ApplicationProblemPlusJSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Login Checks an email and password, and starts a session for their user.
@@ -598,6 +667,9 @@ type StrictServerInterface interface {
 	// GetFareEstimate Returns an estimate of a ride.
 	// (GET /v1/fare-estimate)
 	GetFareEstimate(ctx context.Context, request GetFareEstimateRequestObject) (GetFareEstimateResponseObject, error)
+	// GetMe Returns the logged-in user.
+	// (GET /v1/me)
+	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -727,35 +799,60 @@ func (sh *strictHandler) GetFareEstimate(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// GetMe operation middleware
+func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+	var request GetMeRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMe(ctx, request.(GetMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMe")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMeResponseObject); ok {
+		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"1Fdvb9u2E/4qB/5+wF5M8Z8m2Va/87q0ydatgeNiL4IgoKmzxVoi1ePJhlH4uw8kJceylWbZ2mF7Z0vH",
-	"491zz909+iSULUpr0LATo08iQ5kihZ836Jy25pW1S43hSYpOkS5ZWyNGYrq2cMlcvjP5BlS0SkAbsAbh",
-	"BvkknoToElCqbAScIUil0Dlgu0STgEPDsNacAa6QNkD4sULHIE0KK5nrFOaWYHgOhTYV+yv8G++HcE7o",
-	"spYj64NhC/3VsC8rznrws1zJmxA2KGm+YSCUKaDmDKknEuFUhoX06fGmRDESjkmbhdhut4kgdKU1LqZ/",
-	"TXaWY+F/KmsYDfufsixzraQHpV9Gi28/OI/Qpz3f/yeci5H4X/8B7n586/qN33BjG+OxASSyFHD1OU9e",
-	"v4KXZ+ffQ30VpMhS586DVEjuCe+jduzvfS0JLxzrQjL6/yXZEonrgs4l4b1qan9Q3gwB65MpeMsQBFZk",
-	"IRzx4MVbxUhow9+diaTBUBvGBZKIGH6sNGEqRrf7F97tjO3sAyoW20S8tQttJpEAx9FiIXXeUahElNK5",
-	"taW0q4rtAKKPvRNdYewVuh1BBPsYq98zybAORCZrFpHOnGkHpSTWqsolNcTuieQwxkQ4llw9UoTL6fQa",
-	"ogEom+Ih7qcvOnBPBGvO8djjGFxmicFVRSFpA3YeeLXUJvW/a1p1BhkfHDt8P7kCIwttFl2uErAEcmYr",
-	"Hs1yaZawzjByeS8ncHLjAI2tFlnH3QdFDG+bDHfgdVVyggvtGOlpTu0QbRjyWZK1IRie+5EzfPEDqEyS",
-	"VIzkkkgCY8H6SQNU5eg6YSWb41MjYuJtnuRy7asTiPoSNFXhz5JOkUQiUtIrJHHXEdd7h/ScJtRpC8eq",
-	"0ukXTTe4a3J+JFHfSqgq0ry58b5izHERjSvOujusvZDWmVYZUM2csG1yP5fAIYN0IM3h2vNl1d5Z/CsS",
-	"YWThw7q/v7SOT6L/++D/ARJZ6l9wE6e+NnPbHVtZzXKtYHJxM4Xx9VXTr2+1m1kDvownLpMeXJBl6bcg",
-	"rTCF2SaYXaQL7MF4t1QjFzmTBt5cTBO4vBj/5Pvz3fX06t1vN/4Ng4QZ2bVD8is1dTAnW4A08awl7bFY",
-	"IDuQcDY49cnnWqFxoax15r9eTUUiKsrFSGTMpRv1+7ZE42xFCnuWFv36UL/QvDevxGQ/pfH1lUjECsnV",
-	"ndYb9Abe2vuSpRYjcdob9M5CF3AWqt2s/n6omn9SWsfH6I4NVGZp7NpAYFWotKwneNNTPtE4rGSBcDYY",
-	"JuBseNBIA0gtuqgrVijzmj7BowNJuGMSph4q30tBLFylYhQXnog8R8c/2nTzGXnxPFnRWqbbdjcxVXgo",
-	"b14MBl/s7jA7OvRMEBU7sHcgF5JV9iDsXFSefkEQR9haurSRlo9FURv3DxRsiOdsMHjs2A6NB0Xm7YfP",
-	"tD99nv3wefbnz4p/bx6K0e1dIuq1L0biVYZqGabZcUFiKQL8vsubenghzhlqgsp58ezd77qtoflnGg5Y",
-	"LrG5bzdBXh63RbO2A42+TnccKoM/1SDDf6RBpFK28lpSOlCEXn/Hgmh2/7LeeCbXBy//I70RUPf0DDrJ",
-	"b8golJraJI0scKAZtHnoBf+Fc4J7X1wLDFRpE/wNcuvLzK8vkgVyqOPtkRAgXUKqHUuj0H+FRcud7vhY",
-	"IW0eZEdjeV87PCT2/kfvk18S26Q7miqmA0EYKWvSx8OpTe9ru78Zz91X3FutonS0500VpNy8ymFXUPEX",
-	"OueLMXWCXJGJY7yO20vESNye2B6cbWvh2zsPZlCM3bTLEHKrZA4qrxwjJcAZ+W80mJLEuV4eabx9QdoL",
-	"ZzPrp+vd9o8BAA==",
+	"1Fhdc9u2Ev0rO7h3Jg+X1kds3zZ6U1Mndps0HlmZPng8HohckYhIgFkspWoy/u8dAKQkSnRcpUk/3ihy",
+	"sVicPbt7oE8iNkVpNGq2YvRJZCgTJP94g9Yqo18as1Do3yRoY1IlK6PFSExXBi6Zy3c6X0McrCJQGoxG",
+	"uEE+CSshuASUcTYCzhBkHKO1wGaBOgKLmmGlOANcIq2B8GOFlkHqBJYyVwnMDcHwHAqlK3ZbuC/OD+Gc",
+	"0GYtR8YFwwb6y2FfVpz14Ce5lDc+bIilfsZAKBNAxRlST0TCxhkW0h2P1yWKkbBMSqfi4eEhEoS2NNqG",
+	"41+TmeVYuMfYaEbN7lGWZa5i6UDpl8Hifx+sQ+jTju//Es7FSPynv4W7H77afuPX79jGeKwBiQx5XN2Z",
+	"J69ewouz8++g3goSZKly60AqJPeE81E7dvu+koQXllUhGd3vkkyJxHVC55LwPm5yv5feDAHrlQk4Sx8E",
+	"VmTAL3HghV3FSCjN/z8TUYOh0owpkggYfqwUYSJGt7sb3m2MzewDxiweIvHGpEpPAgEOo8VCqrwjUZEo",
+	"pbUrQ0lXFtsBBB87K7rC2El0O4IA9iFWv2aSYeWJTEangc6cKQulJFZxlUtqiN0T0X6MkbAsuXokCZfT",
+	"6TUEA4hNgvu4nz7vwD0SrDjHQ49jsJkhBlsVhaQ1mLnn1ULpxD3XtOoMMrw4dPh+cgVaFkqnXa4iMARy",
+	"ZioezXKpF7DKMHB550xg5doCalOlWcfee0n0X5sTbsDryuQEU2UZ6WlObRBtGPJZkrUhGJ67ljN8/j3E",
+	"mSQZM5KNAgm0AeM6DVCVo+2ElUyOT7WIibN5ksu1r04g6k1QV4VbSypBEpFISC2RxF1HXO8t0jFFqJIW",
+	"jlWlkq96XO+uOfMjB3WlhHFFitc3zleIOQyiccVZd4W1B9IqU3EGVDPHT5vc9SWwyCAtSL0/9lxalXMW",
+	"fopIaFm4sO7vL43lk+D/3vvfQiJL9TOuQ9dXem66YyurWa5imFzcTGF8fdXU6xtlZ0aDS+OJzaQDF2RZ",
+	"uilIS0xgtvZmF0mKPRhvhmrgImdSw+uLaQSXF+MfXX2+u55evfvlxn1hkDAjs7JIbqQmFuZkCpA6rDWk",
+	"HBYpsgUJZ4NTd/hcxaitT2t98rdXUxGJinIxEhlzaUf9vilRW1NRjD1Dab9e1C8U7/QrMdk90vj6SkRi",
+	"iWTrSusNegNn7XzJUomROO0Neme+Cjjz2W5Gf99nzb0pjeVDdMcaKr3QZqXBs8pnWtYdvKkpd9DQrGSB",
+	"cDYYRmCNf9FIA0gM2qArlijzmj7eowVJuGESJg4qV0teLFwlYhQGngg8R8s/mGT9GXlxnKxoDdOHdjUx",
+	"Vbgvb54PBl9tb987OvSMFxUbsDcgF5LjbCvsbFCebkAQB9haurSRlo9FURv39xSsj+dsMHhs2QaNrSJz",
+	"9sMj7U+Psx8eZ39+VPw7/VCMbu8iUY99MRIvM4wXvpsdJiSkwsPvqrzJhxPinKEiqCxS0Jqbamto/pmC",
+	"A5YLbPbbdJAXh2XRjG1Po29THfvK4A8VyPAvKRAZx6ZyWlJaiAmd/g4JUWz/YbVxJNcHL/4lteFRd/T0",
+	"OslNyCCUmtxEjSywoBiU3taCu+Gc4M6NK0VPlTbBXyO3bmZufJEskH0ebw+EAKkSEmVZ6hjdLSxYbnTH",
+	"xwppvZUdjeV97XCf2LuX3idvEg9RdzRVOA54YRQbnTweTm16X9v9yXjuvuHcaiWlozxvKi/l5lUOm4SK",
+	"L6icr8bUCXJFOrTxOm4nEQNxt6wsdql42HFcOwdlD/6deWYbuUP4zIKTgP6WZ7wyhFkVtFGtgmEMhbJW",
+	"6dT9UxD+uzEE+FvpUt1yvO3+w8Pu/xr5LYq/SZ14KPZxgBnmRqfuV+9LRMHx6T5IsAspN2mKyYnSm/nb",
+	"Zkb7pnN750rF3we6m4r3GMsc4ryyjBQBZ+Ru4DAliXO1OFDwu9eNnl+bGTc77x5+HwA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

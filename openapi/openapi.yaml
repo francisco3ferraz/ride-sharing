@@ -4,6 +4,8 @@ info:
   description: >-
     The public REST API of the Lisbon ride-sharing app, served by the Edge. A request
     other than GET, HEAD or OPTIONS that a browser sends from another origin gets a 403.
+    Requests are rate limited per client address, a logged-in user's per user too, and
+    some routes have stricter limits of their own. A request over a limit gets a 429.
   version: "1.0.0"
   license:
     name: MIT
@@ -48,6 +50,8 @@ paths:
                 $ref: "#/components/schemas/FareEstimate"
         "400":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
   /v1/auth/register:
@@ -80,6 +84,8 @@ paths:
           $ref: "#/components/responses/Problem"
         "413":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
   /v1/auth/login:
@@ -114,6 +120,8 @@ paths:
           $ref: "#/components/responses/Problem"
         "413":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
   # Refresh and logout run on the refresh cookie alone: by the time the web app calls
@@ -139,6 +147,8 @@ paths:
           $ref: "#/components/responses/Problem"
         "403":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
   /v1/auth/logout:
@@ -159,6 +169,8 @@ paths:
               $ref: "#/components/headers/ExpiredSessionCookies"
         "403":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
   /v1/auth/password-reset:
@@ -185,6 +197,8 @@ paths:
           $ref: "#/components/responses/Problem"
         "413":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
   /v1/auth/password-reset/confirm:
@@ -210,6 +224,8 @@ paths:
           $ref: "#/components/responses/Problem"
         "413":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
   /v1/me:
@@ -228,11 +244,18 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
 
 components:
   headers:
+    RetryAfter:
+      description: How many seconds to wait before trying again.
+      schema:
+        type: integer
+        format: int32
     # Both optional on purpose. oapi-codegen writes a required header with Header().Set,
     # which would replace the cookies the handler sets with http.SetCookie. Optional,
     # its generated SetCookie field stays nil and the generated code writes nothing.
@@ -268,6 +291,17 @@ components:
   responses:
     Problem:
       description: An error, in the RFC 9457 problem details format.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TooManyRequests:
+      description: >-
+        A rate limit is used up, in the RFC 9457 problem details format. Retry-After says
+        when to try again.
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
       content:
         application/problem+json:
           schema:

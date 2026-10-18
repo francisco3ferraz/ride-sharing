@@ -59,3 +59,9 @@ WHERE id = $1 AND revoked_at IS NULL;
 UPDATE sessions SET revoked_at = now()
 WHERE id = (SELECT session_id FROM refresh_tokens WHERE token_hash = $1)
   AND revoked_at IS NULL;
+
+-- name: RevokeUserSessions :exec
+-- Updates each session row, so it waits for any rotation in progress, as RevokeSession
+-- does.
+UPDATE sessions SET revoked_at = now()
+WHERE user_id = $1 AND revoked_at IS NULL;

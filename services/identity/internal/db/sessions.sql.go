@@ -136,3 +136,15 @@ func (q *Queries) RevokeSessionByRefreshToken(ctx context.Context, tokenHash []b
 	_, err := q.db.Exec(ctx, revokeSessionByRefreshToken, tokenHash)
 	return err
 }
+
+const revokeUserSessions = `-- name: RevokeUserSessions :exec
+UPDATE sessions SET revoked_at = now()
+WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+// Updates each session row, so it waits for any rotation in progress, as RevokeSession
+// does.
+func (q *Queries) RevokeUserSessions(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeUserSessions, userID)
+	return err
+}

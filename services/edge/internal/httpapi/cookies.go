@@ -41,6 +41,35 @@ func sessionCookies(tokens *identityv1.Tokens) ([]*http.Cookie, error) {
 	return []*http.Cookie{access, refresh}, nil
 }
 
+// The browser deletes a cookie only for a Set-Cookie with the same name and Path, and
+// refuses a prefixed one without Secure, so these must match sessionCookies.
+func expiredSessionCookies() []*http.Cookie {
+	return []*http.Cookie{
+		expiredCookie(accessTokenCookie, "/", http.SameSiteLaxMode),
+		expiredCookie(refreshTokenCookie, refreshTokenPath, http.SameSiteStrictMode),
+	}
+}
+
+func expiredCookie(name, path string, sameSite http.SameSite) *http.Cookie {
+	return &http.Cookie{
+		Name: name,
+		Path: path,
+		// Written as Max-Age=0, which deletes it.
+		MaxAge:   -1,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: sameSite,
+	}
+}
+
+// A missing cookie becomes an empty token, which Identity rejects like any unknown one.
+func refreshTokenValue(cookie *string) string {
+	if cookie == nil {
+		return ""
+	}
+	return *cookie
+}
+
 func tokenCookie(name, path string, sameSite http.SameSite, token issuedToken) (*http.Cookie, error) {
 	if token.GetToken() == "" {
 		return nil, errors.New("empty token")

@@ -116,6 +116,51 @@ paths:
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/Problem"
+  # Refresh and logout run on the refresh cookie alone: by the time the web app calls
+  # them, the access token has usually expired.
+  /v1/auth/refresh:
+    post:
+      operationId: refresh
+      summary: Replaces both session cookies with new ones.
+      description: >-
+        A missing, unknown, expired or revoked refresh token gets a 401, and so does one
+        that was already used, which also ends its session: someone else holds a token
+        from it.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RefreshTokenCookie"
+      responses:
+        "204":
+          description: The session continues, with new tokens.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SessionCookies"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Ends the session, and clears both session cookies.
+      description: >-
+        It succeeds without a refresh token, or with one that's unknown or already
+        revoked. After a 500 the cookies stay, so the client can retry.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RefreshTokenCookie"
+      responses:
+        "204":
+          description: The session has ended.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/ExpiredSessionCookies"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
   /v1/me:
     get:
       operationId: getMe
@@ -137,7 +182,7 @@ paths:
 
 components:
   headers:
-    # Optional on purpose. oapi-codegen writes a required header with Header().Set,
+    # Both optional on purpose. oapi-codegen writes a required header with Header().Set,
     # which would replace the cookies the handler sets with http.SetCookie. Optional,
     # its generated SetCookie field stays nil and the generated code writes nothing.
     SessionCookies:
@@ -147,9 +192,25 @@ components:
         /v1/auth. JavaScript can't read either.
       schema:
         type: string
+    ExpiredSessionCookies:
+      description: Both session cookies, with Max-Age=0 so the browser deletes them.
+      schema:
+        type: string
+  parameters:
+    RefreshTokenCookie:
+      name: __Secure-refresh_token
+      x-go-name: RefreshToken
+      in: cookie
+      # Optional, so a missing cookie gets Identity's 401 rather than the validator's 400.
+      required: false
+      description: >-
+        The refresh token, which register, login and refresh set as an HttpOnly cookie,
+        sent only to /v1/auth.
+      schema:
+        type: string
   securitySchemes:
     CookieAuth:
-      description: The access token, which register and login set as an HttpOnly cookie.
+      description: The access token, which register, login and refresh set as an HttpOnly cookie.
       type: apiKey
       in: cookie
       name: __Host-access_token

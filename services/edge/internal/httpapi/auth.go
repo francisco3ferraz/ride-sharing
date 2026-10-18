@@ -13,7 +13,9 @@ import (
 )
 
 // Register and login hash a password, and Identity limits how many hashes run at once,
-// so in a burst of logins requests wait their turn.
+// so in a burst of logins requests wait their turn. Refresh hashes nothing but gets the
+// same room: one that times out after Identity commits leaves the browser holding a
+// used token, so its next refresh ends the session.
 const identityTimeout = 2 * time.Second
 
 func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestObject) (api.RegisterUserResponseObject, error) {
@@ -61,6 +63,38 @@ func (h *Handler) Login(ctx context.Context, req api.LoginRequestObject) (api.Lo
 	return loginResponse{cookies: cookies, next: api.Login200JSONResponse{Body: user}}, nil
 }
 
+func (h *Handler) Refresh(ctx context.Context, req api.RefreshRequestObject) (api.RefreshResponseObject, error) {
+	ctx, cancel := context.WithTimeout(ctx, identityTimeout)
+	defer cancel()
+
+	resp, err := h.identity.Refresh(ctx, &identityv1.RefreshRequest{
+		RefreshToken: refreshTokenValue(req.Params.RefreshToken),
+	})
+	if err != nil {
+		return nil, err
+	}
+	cookies, err := sessionCookies(resp.GetTokens())
+	if err != nil {
+		return nil, err
+	}
+	return refreshResponse{cookies: cookies}, nil
+}
+
+func (h *Handler) Logout(ctx context.Context, req api.LogoutRequestObject) (api.LogoutResponseObject, error) {
+	ctx, cancel := context.WithTimeout(ctx, identityTimeout)
+	defer cancel()
+
+	_, err := h.identity.Logout(ctx, &identityv1.LogoutRequest{
+		RefreshToken: refreshTokenValue(req.Params.RefreshToken),
+	})
+	if err != nil {
+		// The cookies stay, so the user can retry: clearing them would make the browser
+		// forget a refresh token that still works.
+		return nil, err
+	}
+	return logoutResponse{cookies: expiredSessionCookies()}, nil
+}
+
 // Handlers never get the ResponseWriter, so the response sets the cookies. The
 // generated response isn't embedded: its Visit method would be promoted, so a misnamed
 // method here would still compile and set no cookies.
@@ -82,6 +116,26 @@ type loginResponse struct {
 func (r loginResponse) VisitLoginResponse(w http.ResponseWriter) error {
 	setCookies(w, r.cookies)
 	return r.next.VisitLoginResponse(w)
+}
+
+type refreshResponse struct {
+	cookies []*http.Cookie
+	next    api.Refresh204Response
+}
+
+func (r refreshResponse) VisitRefreshResponse(w http.ResponseWriter) error {
+	setCookies(w, r.cookies)
+	return r.next.VisitRefreshResponse(w)
+}
+
+type logoutResponse struct {
+	cookies []*http.Cookie
+	next    api.Logout204Response
+}
+
+func (r logoutResponse) VisitLogoutResponse(w http.ResponseWriter) error {
+	setCookies(w, r.cookies)
+	return r.next.VisitLogoutResponse(w)
 }
 
 // The validator lets only rider and driver through. Anything else would reach

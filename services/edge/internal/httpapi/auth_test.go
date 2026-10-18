@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -187,6 +188,67 @@ func TestLogin(t *testing.T) {
 	assert.Equal(t, "a long enough password", identity.gotLogin.GetPassword())
 }
 
+func TestRefresh(t *testing.T) {
+	refreshCookie := &http.Cookie{Name: "__Secure-refresh_token", Value: "old-refresh-token"}
+	tests := []struct {
+		name      string
+		cookies   []*http.Cookie
+		wantToken string
+	}{
+		{name: "refresh cookie", cookies: []*http.Cookie{refreshCookie}, wantToken: "old-refresh-token"},
+		// By the time the web app refreshes, the access token has usually expired.
+		{
+			name:      "with an expired access token",
+			cookies:   []*http.Cookie{refreshCookie, {Name: "__Host-access_token", Value: testAccessToken}},
+			wantToken: "old-refresh-token",
+		},
+		// Identity rejects the empty token like any unknown one, so this gets its 401.
+		{name: "no cookie", wantToken: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &fakeIdentity{tokens: testTokens()}
+			verifier := &fakeVerifier{err: errors.New("token has invalid claims: token is expired")}
+			rec := postCookies(t, NewHandler(nil, identity, verifier), "/v1/auth/refresh", tt.cookies...)
+
+			assert.Equal(t, http.StatusNoContent, rec.Code)
+			assert.Empty(t, rec.Body.String())
+			assertSessionCookies(t, rec)
+			require.NotNil(t, identity.gotRefresh)
+			assert.Equal(t, tt.wantToken, identity.gotRefresh.GetRefreshToken())
+		})
+	}
+}
+
+func TestLogout(t *testing.T) {
+	tests := []struct {
+		name      string
+		cookies   []*http.Cookie
+		wantToken string
+	}{
+		{
+			name:      "refresh cookie",
+			cookies:   []*http.Cookie{{Name: "__Secure-refresh_token", Value: testRefreshToken}},
+			wantToken: testRefreshToken,
+		},
+		{name: "no cookie", wantToken: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &fakeIdentity{}
+			rec := postCookies(t, NewHandler(nil, identity, nil), "/v1/auth/logout", tt.cookies...)
+
+			assert.Equal(t, http.StatusNoContent, rec.Code)
+			assert.Empty(t, rec.Body.String())
+			assertExpiredSessionCookies(t, rec)
+			require.NotNil(t, identity.gotLogout)
+			assert.Equal(t, tt.wantToken, identity.gotLogout.GetRefreshToken())
+		})
+	}
+}
+
 func TestAuthMapsIdentityErrors(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -236,6 +298,24 @@ func TestAuthMapsIdentityErrors(t *testing.T) {
 			target: "/v1/auth/login",
 			body:   `{"email": "ana@example.pt", "password": "a long enough password"}`,
 			err:    status.Error(codes.Internal, "get user: connection refused"),
+			want:   api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},
+		},
+		{
+			name:   "rejected refresh token",
+			target: "/v1/auth/refresh",
+			err:    status.Error(codes.Unauthenticated, "refresh token is invalid or expired"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Unauthorized",
+				Status: http.StatusUnauthorized,
+				Detail: new("refresh token is invalid or expired"),
+			},
+		},
+		// The cookies stay, so the user can retry.
+		{
+			name:   "logout fails",
+			target: "/v1/auth/logout",
+			err:    status.Error(codes.Internal, "revoke session: connection refused"),
 			want:   api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},
 		},
 	}
@@ -333,6 +413,49 @@ func assertSessionCookies(t *testing.T, rec *httptest.ResponseRecorder) {
 		// the fraction of a second.
 		assert.InDelta(t, w.lifetime.Seconds(), got.MaxAge, 2)
 	}
+}
+
+// The browser deletes a cookie only for a Set-Cookie with the same name and Path, and
+// ignores a prefixed one without Secure.
+func assertExpiredSessionCookies(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	want := []struct {
+		name, path string
+		sameSite   http.SameSite
+	}{
+		{name: "__Host-access_token", path: "/", sameSite: http.SameSiteLaxMode},
+		{name: "__Secure-refresh_token", path: "/v1/auth", sameSite: http.SameSiteStrictMode},
+	}
+
+	cookies := rec.Result().Cookies()
+	require.Len(t, cookies, len(want))
+	for i, w := range want {
+		got := cookies[i]
+		assert.Equal(t, w.name, got.Name)
+		assert.Empty(t, got.Value)
+		assert.Equal(t, w.path, got.Path)
+		assert.Empty(t, got.Domain)
+		assert.Equal(t, w.sameSite, got.SameSite)
+		assert.True(t, got.Secure, "Secure")
+		assert.True(t, got.HttpOnly, "HttpOnly")
+		// How Go parses Max-Age=0.
+		assert.Equal(t, -1, got.MaxAge)
+	}
+}
+
+// postCookies sends a POST with no body, as the web app calls refresh and logout.
+func postCookies(t *testing.T, h *Handler, target string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	routes, err := h.Routes()
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, target, nil)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	rec := httptest.NewRecorder()
+	routes.ServeHTTP(rec, req)
+	return rec
 }
 
 // post sends a JSON body through the real routes, so tests cover the body limit and

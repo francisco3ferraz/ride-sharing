@@ -23,6 +23,8 @@ type AccountService interface {
 	Refresh(ctx context.Context, token string) (account.Tokens, error)
 	Logout(ctx context.Context, token string) error
 	GetUser(ctx context.Context, userID uuid.UUID) (account.User, error)
+	RequestPasswordReset(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, token, pw string) error
 }
 
 // Server implements identityv1.IdentityServiceServer.
@@ -94,12 +96,28 @@ func (s *Server) GetUser(ctx context.Context, req *identityv1.GetUserRequest) (*
 	return &identityv1.GetUserResponse{User: userToProto(user)}, nil
 }
 
+// An empty email isn't INVALID_ARGUMENT: it matches no user, so it succeeds like any
+// unknown one.
+func (s *Server) RequestPasswordReset(ctx context.Context, req *identityv1.RequestPasswordResetRequest) (*identityv1.RequestPasswordResetResponse, error) {
+	if err := s.accounts.RequestPasswordReset(ctx, req.GetEmail()); err != nil {
+		return nil, toStatus(err)
+	}
+	return &identityv1.RequestPasswordResetResponse{}, nil
+}
+
+func (s *Server) ResetPassword(ctx context.Context, req *identityv1.ResetPasswordRequest) (*identityv1.ResetPasswordResponse, error) {
+	if err := s.accounts.ResetPassword(ctx, req.GetToken(), req.GetPassword()); err != nil {
+		return nil, toStatus(err)
+	}
+	return &identityv1.ResetPasswordResponse{}, nil
+}
+
 // toStatus maps errors to the codes in the proto's comments. A handler must never
 // return a plain error, or a nil response with a nil error, which gRPC sends as OK.
 func toStatus(err error) error {
 	switch {
-	// The Edge shows InvalidArgument messages to the user. This one is written for them.
-	case errors.Is(err, password.ErrInvalid):
+	// The Edge shows InvalidArgument messages to the user. These are written for them.
+	case errors.Is(err, password.ErrInvalid), errors.Is(err, account.ErrInvalidResetToken):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, account.ErrEmailTaken):
 		return status.Error(codes.AlreadyExists, err.Error())

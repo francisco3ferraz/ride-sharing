@@ -29,9 +29,11 @@ var testTokens = account.Tokens{
 // built from its arguments, so a test sees whether the role made it through both
 // translations. gotToken is the refresh token it was given.
 type fakeAccounts struct {
-	err      error
-	called   bool
-	gotToken string
+	err         error
+	called      bool
+	gotToken    string
+	gotEmail    string
+	gotPassword string
 }
 
 func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, account.Tokens, error) {
@@ -71,6 +73,19 @@ func (f *fakeAccounts) GetUser(_ context.Context, userID uuid.UUID) (account.Use
 		return account.User{}, f.err
 	}
 	return account.User{ID: userID, Email: "ana@example.pt", Role: account.RoleRider}, nil
+}
+
+func (f *fakeAccounts) RequestPasswordReset(_ context.Context, email string) error {
+	f.called = true
+	f.gotEmail = email
+	return f.err
+}
+
+func (f *fakeAccounts) ResetPassword(_ context.Context, token, pw string) error {
+	f.called = true
+	f.gotToken = token
+	f.gotPassword = pw
+	return f.err
 }
 
 func TestRegister(t *testing.T) {
@@ -201,6 +216,32 @@ func TestGetUserRejectsMalformedIDs(t *testing.T) {
 	}
 }
 
+func TestRequestPasswordReset(t *testing.T) {
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
+
+	resp, err := srv.RequestPasswordReset(context.Background(), &identityv1.RequestPasswordResetRequest{Email: "ana@example.pt"})
+
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "ana@example.pt", accounts.gotEmail)
+}
+
+func TestResetPassword(t *testing.T) {
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
+
+	resp, err := srv.ResetPassword(context.Background(), &identityv1.ResetPasswordRequest{
+		Token:    "reset-token",
+		Password: "a brand new long password",
+	})
+
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "reset-token", accounts.gotToken)
+	assert.Equal(t, "a brand new long password", accounts.gotPassword)
+}
+
 // Every RPC shares the mapping, so each case runs through all of them.
 func TestErrorCodes(t *testing.T) {
 	tests := []struct {
@@ -216,6 +257,7 @@ func TestErrorCodes(t *testing.T) {
 		{name: "email taken", err: account.ErrEmailTaken, want: codes.AlreadyExists},
 		{name: "invalid credentials", err: account.ErrInvalidCredentials, want: codes.Unauthenticated},
 		{name: "invalid refresh token", err: account.ErrInvalidRefreshToken, want: codes.Unauthenticated},
+		{name: "invalid reset token", err: account.ErrInvalidResetToken, want: codes.InvalidArgument},
 		{name: "no such user", err: account.ErrUserNotFound, want: codes.NotFound},
 		{
 			name: "caller cancelled",
@@ -246,8 +288,13 @@ func TestErrorCodes(t *testing.T) {
 			_, refreshErr := srv.Refresh(context.Background(), &identityv1.RefreshRequest{RefreshToken: "refresh-token"})
 			_, logoutErr := srv.Logout(context.Background(), &identityv1.LogoutRequest{RefreshToken: "refresh-token"})
 			_, getUserErr := srv.GetUser(context.Background(), &identityv1.GetUserRequest{UserId: testID.String()})
+			_, requestResetErr := srv.RequestPasswordReset(context.Background(), &identityv1.RequestPasswordResetRequest{Email: "ana@example.pt"})
+			_, resetErr := srv.ResetPassword(context.Background(), &identityv1.ResetPasswordRequest{
+				Token:    "reset-token",
+				Password: "a brand new long password",
+			})
 
-			for _, err := range []error{registerErr, loginErr, refreshErr, logoutErr, getUserErr} {
+			for _, err := range []error{registerErr, loginErr, refreshErr, logoutErr, getUserErr, requestResetErr, resetErr} {
 				assert.Equal(t, tt.want, status.Code(err))
 				assert.Equal(t, tt.err.Error(), status.Convert(err).Message())
 			}

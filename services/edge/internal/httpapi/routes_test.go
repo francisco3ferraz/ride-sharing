@@ -2,12 +2,15 @@ package httpapi
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"net/netip"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/clientip"
 )
 
 const loginBody = `{"email": "ana@example.pt", "password": "a long enough password"}`
@@ -60,6 +63,43 @@ func TestAllowsSameOriginRequests(t *testing.T) {
 
 			assert.Equal(t, http.StatusOK, rec.Code)
 			assert.NotNil(t, identity.gotLogin, "identity should be called")
+		})
+	}
+}
+
+func TestFindClientIP(t *testing.T) {
+	tests := []struct {
+		name         string
+		forwardedFor string
+		wantAddr     netip.Addr
+		wantFound    bool
+	}{
+		{name: "through Traefik", forwardedFor: "10.0.0.1, 203.0.113.7", wantAddr: netip.MustParseAddr("203.0.113.7"), wantFound: true},
+		{name: "not through Traefik"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls int
+			var gotAddr netip.Addr
+			var found bool
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				gotAddr, found = clientip.FromContext(r.Context())
+				w.WriteHeader(http.StatusNoContent)
+			})
+			req := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+			if tt.forwardedFor != "" {
+				req.Header.Set("X-Forwarded-For", tt.forwardedFor)
+			}
+			rec := httptest.NewRecorder()
+
+			findClientIP(next).ServeHTTP(rec, req)
+
+			assert.Equal(t, 1, calls, "next should be called once")
+			assert.Equal(t, http.StatusNoContent, rec.Code)
+			assert.Equal(t, tt.wantFound, found)
+			assert.Equal(t, tt.wantAddr, gotAddr)
 		})
 	}
 }

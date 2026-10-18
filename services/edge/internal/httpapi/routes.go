@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -13,6 +14,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/clientip"
 )
 
 // No request in the API needs more, and the validator and the handlers each hold the
@@ -50,12 +52,26 @@ func (h *Handler) Routes() (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.Handle("/v1/", rejectCrossOrigin(h.authenticate(limitBody(validate(apiMux)))))
+	mux.Handle("/v1/", findClientIP(rejectCrossOrigin(h.authenticate(limitBody(validate(apiMux))))))
 
 	return otelhttp.NewHandler(mux, "edge",
 		// Kubernetes probes /healthz every few seconds; those spans would flood Jaeger.
 		otelhttp.WithFilter(func(r *http.Request) bool { return r.URL.Path != "/healthz" }),
 	), nil
+}
+
+// findClientIP puts the client's address in the request's context. A request without
+// one didn't come through Traefik. It still goes through, and is logged.
+func findClientIP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		addr, ok := clientip.FromRequest(r)
+		if !ok {
+			log.Printf("%s %s: no client address in X-Forwarded-For", r.Method, r.URL.Path)
+			next.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(clientip.NewContext(r.Context(), addr)))
+	})
 }
 
 // It goes outside limitBody, so a refused request's body is never read. A request with

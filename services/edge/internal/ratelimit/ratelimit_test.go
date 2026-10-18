@@ -82,7 +82,8 @@ func TestLimiter(t *testing.T) {
 		start := time.Now()
 		ok, _ := unreachable.Allow(ctx, "unreachable", "203.0.113.7", Limit{Rate: 1, Burst: 1, Period: time.Minute})
 		assert.True(t, ok)
-		assert.Less(t, time.Since(start), time.Second)
+		// A refused connection fails at once, without waiting out the check's deadline.
+		assert.Less(t, time.Since(start), checkTimeout)
 		assert.Equal(t, map[string]int64{"error": 1}, checkCounts(t, metrics, "unreachable"))
 	})
 
@@ -139,6 +140,7 @@ func newClient(t *testing.T, connString, username, password string) *redis.Clien
 	opts.Password = password
 	opts.ContextTimeoutEnabled = true
 	opts.MaxRetries = -1
+	opts.DialerRetries = 1
 	client := redis.NewClient(opts)
 	t.Cleanup(func() { _ = client.Close() })
 	return client

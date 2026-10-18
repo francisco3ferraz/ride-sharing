@@ -90,10 +90,12 @@ func run() error {
 		Username: cfg.ValkeyUsername,
 		Password: cfg.ValkeyPassword,
 		// Each rate-limit check has a short deadline, which go-redis ignores without
-		// this, falling back to 5-second timeouts. Retries wouldn't fit in it either
-		// (0 means the default of 3).
+		// this, falling back to 5-second timeouts. Retries wouldn't fit in it either:
+		// neither a command's (0 means the default of 3) nor a dial's, which wait 100ms
+		// apart, so a refused connection would hold every request for the whole deadline.
 		ContextTimeoutEnabled: true,
 		MaxRetries:            -1,
+		DialerRetries:         1,
 	})
 	defer closeConn(valkey, "valkey")
 	// Spans would otherwise record each command's arguments, and the keys hold client

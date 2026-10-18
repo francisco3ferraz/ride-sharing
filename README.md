@@ -41,13 +41,17 @@ The whole local stack uses about 3 GB of memory. Any component can be switched o
 
 ```
 browser ─https─▶ Traefik (Gateway API) ─▶ Edge (REST) ─gRPC─▶ services ─▶ Postgres
+                                           │
+                                           └─▶ Valkey (rate limits)
 ```
 
 The browser only ever talks to the Edge, through Traefik. The Edge holds no business logic: it translates REST into gRPC calls to the services that own each decision.
 
+**Requests are rate limited at the Edge, and logins locked out in Identity.** The Edge limits requests per client address, per logged-in user, and per route for login, registration and password reset. It keeps its counts in [Valkey](https://valkey.io/), so every copy of the Edge shares them. A request over a limit gets a 429 with `Retry-After`. If Valkey can't answer, requests go through and the failures are counted in a metric. Account protection doesn't depend on Valkey: Identity counts failed logins per email and client address in its own database, and five within 15 minutes lock that pair out for 15 minutes, whether or not the email is registered.
+
 **The REST API is spec-first.** [`openapi/openapi.yaml`](openapi/openapi.yaml) is the contract. The Edge's handler interfaces are generated from it with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen), every request is validated against it before a handler runs, and Redocly lints it in CI.
 
-**Each service owns its data.** Postgres runs in the cluster under the [CloudNativePG](https://cloudnative-pg.io/) operator, with one database and one role per service, so no service can read another's tables. A service's schema migrations are compiled into its binary and applied by an init container before the pod starts.
+**Each service owns its data.** Postgres runs in the cluster under the [CloudNativePG](https://cloudnative-pg.io/) operator, with one database and one role per service, so no service can read another's tables. Valkey likewise gives each service its own user, limited to its own keys, and keeps nothing that can't be lost. A service's schema migrations are compiled into its binary and applied by an init container before the pod starts.
 
 **Every request is one trace.** Traefik and every service send their telemetry over OTLP to the OpenTelemetry Collector, which forwards traces to Jaeger, metrics to Prometheus and logs to Loki. Grafana shows all three in one place.
 

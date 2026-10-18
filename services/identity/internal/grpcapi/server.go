@@ -5,9 +5,11 @@ package grpcapi
 import (
 	"context"
 	"errors"
+	"net/netip"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -19,7 +21,7 @@ import (
 // AccountService is what Server needs from *account.Service, so tests can replace it.
 type AccountService interface {
 	Register(ctx context.Context, email, pw string, role account.Role) (account.User, account.Tokens, error)
-	Login(ctx context.Context, email, pw string) (account.User, account.Tokens, error)
+	Login(ctx context.Context, email, pw string, clientIP netip.Addr) (account.User, account.Tokens, error)
 	Refresh(ctx context.Context, token string) (account.Tokens, error)
 	Logout(ctx context.Context, token string) error
 	GetUser(ctx context.Context, userID uuid.UUID) (account.User, error)
@@ -56,7 +58,14 @@ func (s *Server) Register(ctx context.Context, req *identityv1.RegisterRequest) 
 }
 
 func (s *Server) Login(ctx context.Context, req *identityv1.LoginRequest) (*identityv1.LoginResponse, error) {
-	user, tokens, err := s.accounts.Login(ctx, req.GetEmail(), req.GetPassword())
+	// Without the address, the lockout can't count the attempt, so it doesn't go ahead.
+	// INTERNAL, since only a broken caller leaves it out: the Edge always sends it.
+	clientIP, ok := clientIPFrom(ctx)
+	if !ok {
+		return nil, status.Error(codes.Internal, clientIPKey+" metadata is missing or isn't an IP address")
+	}
+
+	user, tokens, err := s.accounts.Login(ctx, req.GetEmail(), req.GetPassword(), clientIP)
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -112,6 +121,24 @@ func (s *Server) ResetPassword(ctx context.Context, req *identityv1.ResetPasswor
 	return &identityv1.ResetPasswordResponse{}, nil
 }
 
+// clientIPKey is the metadata entry the Edge sends the client's address in.
+const clientIPKey = "client-ip"
+
+// clientIPFrom returns the client's address from the call's metadata. It's trusted
+// because only the Edge can call Identity, which doesn't otherwise know who the client
+// is.
+func clientIPFrom(ctx context.Context) (netip.Addr, bool) {
+	values := metadata.ValueFromIncomingContext(ctx, clientIPKey)
+	if len(values) != 1 {
+		return netip.Addr{}, false
+	}
+	addr, err := netip.ParseAddr(values[0])
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return addr.Unmap(), true
+}
+
 // toStatus maps errors to the codes in the proto's comments. A handler must never
 // return a plain error, or a nil response with a nil error, which gRPC sends as OK.
 func toStatus(err error) error {
@@ -125,6 +152,8 @@ func toStatus(err error) error {
 		return status.Error(codes.Unauthenticated, err.Error())
 	case errors.Is(err, account.ErrUserNotFound):
 		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, account.ErrTooManyLoginAttempts):
+		return status.Error(codes.ResourceExhausted, err.Error())
 	// The caller gave up, for example while waiting for a hashing slot. Not our fault.
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
@@ -34,6 +36,7 @@ type fakeAccounts struct {
 	gotToken    string
 	gotEmail    string
 	gotPassword string
+	gotClientIP netip.Addr
 }
 
 func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, account.Tokens, error) {
@@ -44,8 +47,9 @@ func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account
 	return account.User{ID: testID, Email: email, Role: role}, testTokens, nil
 }
 
-func (f *fakeAccounts) Login(_ context.Context, email, _ string) (account.User, account.Tokens, error) {
+func (f *fakeAccounts) Login(_ context.Context, email, _ string, clientIP netip.Addr) (account.User, account.Tokens, error) {
 	f.called = true
+	f.gotClientIP = clientIP
 	if f.err != nil {
 		return account.User{}, account.Tokens{}, f.err
 	}
@@ -145,18 +149,55 @@ func TestRegisterRejectsInvalidRequests(t *testing.T) {
 }
 
 func TestLogin(t *testing.T) {
-	srv := New(&fakeAccounts{})
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
 
-	resp, err := srv.Login(context.Background(), &identityv1.LoginRequest{
+	resp, err := srv.Login(fromClient("2001:db8::1"), &identityv1.LoginRequest{
 		Email:    "ana@example.pt",
 		Password: "a long enough password",
 	})
 
 	require.NoError(t, err)
+	assert.Equal(t, netip.MustParseAddr("2001:db8::1"), accounts.gotClientIP)
 	assert.Equal(t, testID.String(), resp.GetUser().GetId())
 	assert.Equal(t, "ana@example.pt", resp.GetUser().GetEmail())
 	assert.Equal(t, identityv1.Role_ROLE_DRIVER, resp.GetUser().GetRole())
 	assertTestTokens(t, resp.GetTokens())
+}
+
+func TestLoginNeedsTheClientIP(t *testing.T) {
+	tests := []struct {
+		name string
+		md   metadata.MD
+	}{
+		{name: "missing"},
+		{name: "not an address", md: metadata.Pairs("client-ip", "unknown")},
+		{name: "two addresses", md: metadata.Pairs("client-ip", "203.0.113.7", "client-ip", "203.0.113.8")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			accounts := &fakeAccounts{}
+			srv := New(accounts)
+
+			_, err := srv.Login(metadata.NewIncomingContext(context.Background(), tt.md), &identityv1.LoginRequest{
+				Email:    "ana@example.pt",
+				Password: "a long enough password",
+			})
+
+			assert.Equal(t, codes.Internal, status.Code(err))
+			assert.False(t, accounts.called, "accounts should not be called")
+		})
+	}
+}
+
+func TestLoginUnmapsIPv4(t *testing.T) {
+	accounts := &fakeAccounts{}
+
+	_, err := New(accounts).Login(fromClient("::ffff:203.0.113.7"), &identityv1.LoginRequest{Email: "ana@example.pt"})
+
+	require.NoError(t, err)
+	assert.Equal(t, netip.MustParseAddr("203.0.113.7"), accounts.gotClientIP)
 }
 
 func TestRefresh(t *testing.T) {
@@ -259,6 +300,7 @@ func TestErrorCodes(t *testing.T) {
 		{name: "invalid refresh token", err: account.ErrInvalidRefreshToken, want: codes.Unauthenticated},
 		{name: "invalid reset token", err: account.ErrInvalidResetToken, want: codes.InvalidArgument},
 		{name: "no such user", err: account.ErrUserNotFound, want: codes.NotFound},
+		{name: "too many login attempts", err: account.ErrTooManyLoginAttempts, want: codes.ResourceExhausted},
 		{
 			name: "caller cancelled",
 			err:  fmt.Errorf("wait for hashing slot: %w", context.Canceled),
@@ -281,7 +323,7 @@ func TestErrorCodes(t *testing.T) {
 				Password: "a long enough password",
 				Role:     identityv1.Role_ROLE_RIDER,
 			})
-			_, loginErr := srv.Login(context.Background(), &identityv1.LoginRequest{
+			_, loginErr := srv.Login(fromClient("203.0.113.7"), &identityv1.LoginRequest{
 				Email:    "ana@example.pt",
 				Password: "a long enough password",
 			})
@@ -300,6 +342,11 @@ func TestErrorCodes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fromClient is a call's context as the Edge sends it, for a client at addr.
+func fromClient(addr string) context.Context {
+	return metadata.NewIncomingContext(context.Background(), metadata.Pairs("client-ip", addr))
 }
 
 func assertTestTokens(t *testing.T, got *identityv1.Tokens) {

@@ -36,8 +36,12 @@ type IdentityServiceClient interface {
 	// email, a password that breaks the rule or an unspecified role, and ALREADY_EXISTS
 	// for a taken email.
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
-	// Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
-	// wrong password alike.
+	// Starts a session for the user. The caller sends the client's IP address in the
+	// client-ip metadata entry, and fails with INTERNAL without it. Fails with
+	// UNAUTHENTICATED for an unknown email or a wrong password alike. Failed logins count
+	// per email and address, registered or not: five within 15 minutes block that pair
+	// for 15 minutes, during which it fails with RESOURCE_EXHAUSTED without its password
+	// being checked.
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
 	// Marks the refresh token used and returns new tokens for the same session. Fails
 	// with UNAUTHENTICATED for an unknown, expired, used or revoked token alike. A used
@@ -145,8 +149,12 @@ type IdentityServiceServer interface {
 	// email, a password that breaks the rule or an unspecified role, and ALREADY_EXISTS
 	// for a taken email.
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
-	// Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
-	// wrong password alike.
+	// Starts a session for the user. The caller sends the client's IP address in the
+	// client-ip metadata entry, and fails with INTERNAL without it. Fails with
+	// UNAUTHENTICATED for an unknown email or a wrong password alike. Failed logins count
+	// per email and address, registered or not: five within 15 minutes block that pair
+	// for 15 minutes, during which it fails with RESOURCE_EXHAUSTED without its password
+	// being checked.
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
 	// Marks the refresh token used and returns new tokens for the same session. Fails
 	// with UNAUTHENTICATED for an unknown, expired, used or revoked token alike. A used

@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
+	"net/netip"
 	"os"
 	"slices"
 	"sync"
@@ -27,6 +29,11 @@ import (
 )
 
 const testPassword = "a long enough password"
+
+var (
+	testIP  = netip.MustParseAddr("203.0.113.7")
+	otherIP = netip.MustParseAddr("2001:db8::1")
+)
 
 func TestService(t *testing.T) {
 	ctx := t.Context()
@@ -59,7 +66,7 @@ func TestService(t *testing.T) {
 		assert.NotEqual(t, uuid.Nil, registered.ID)
 		assert.Equal(t, User{ID: registered.ID, Email: "ana@example.pt", Role: RoleRider}, registered)
 
-		loggedIn, _, err := svc.Login(ctx, "Ana@Example.pt", testPassword)
+		loggedIn, _, err := svc.Login(ctx, "Ana@Example.pt", testPassword, testIP)
 		require.NoError(t, err)
 		assert.Equal(t, registered, loggedIn)
 	})
@@ -69,11 +76,11 @@ func TestService(t *testing.T) {
 		require.NoError(t, err)
 		assertTokens(t, pool, pub, user, tokens)
 
-		_, first, err := svc.Login(ctx, "eva@example.pt", testPassword)
+		_, first, err := svc.Login(ctx, "eva@example.pt", testPassword, testIP)
 		require.NoError(t, err)
 		assertTokens(t, pool, pub, user, first)
 
-		_, second, err := svc.Login(ctx, "eva@example.pt", testPassword)
+		_, second, err := svc.Login(ctx, "eva@example.pt", testPassword, testIP)
 		require.NoError(t, err)
 		assertTokens(t, pool, pub, user, second)
 
@@ -100,12 +107,124 @@ func TestService(t *testing.T) {
 		user, _, err := svc.Register(ctx, "diana@example.pt", testPassword, RoleRider)
 		require.NoError(t, err)
 
-		_, _, err = svc.Login(ctx, "diana@example.pt", "not the right password")
+		_, _, err = svc.Login(ctx, "diana@example.pt", "not the right password", testIP)
 		assert.ErrorIs(t, err, ErrInvalidCredentials)
-		_, _, err = svc.Login(ctx, "nobody@example.pt", testPassword)
+		_, _, err = svc.Login(ctx, "nobody@example.pt", testPassword, testIP)
 		assert.ErrorIs(t, err, ErrInvalidCredentials)
 
 		assert.Equal(t, 1, countSessions(t, pool, user.ID))
+	})
+
+	t.Run("five failed logins block the pair, even for the right password", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "yara@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		failLogins(t, svc, "yara@example.pt", testIP, 5)
+
+		_, _, err = svc.Login(ctx, "yara@example.pt", testPassword, testIP)
+		assert.ErrorIs(t, err, ErrTooManyLoginAttempts)
+		// The same email in another case is the same pair.
+		_, _, err = svc.Login(ctx, "Yara@Example.pt", testPassword, testIP)
+		assert.ErrorIs(t, err, ErrTooManyLoginAttempts)
+		_, _, err = svc.Login(ctx, "yara@example.pt", testPassword, otherIP)
+		assert.NoError(t, err, "another address isn't blocked")
+	})
+
+	t.Run("an unknown email is blocked the same way", func(t *testing.T) {
+		failLogins(t, svc, "nobody-yet@example.pt", testIP, 5)
+
+		_, _, err := svc.Login(ctx, "nobody-yet@example.pt", testPassword, testIP)
+		assert.ErrorIs(t, err, ErrTooManyLoginAttempts)
+	})
+
+	t.Run("a successful login clears its pair", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "zara@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		failLogins(t, svc, "zara@example.pt", testIP, 4)
+		_, _, err = svc.Login(ctx, "zara@example.pt", testPassword, testIP)
+		require.NoError(t, err)
+
+		failLogins(t, svc, "zara@example.pt", testIP, 4)
+		_, _, err = svc.Login(ctx, "zara@example.pt", testPassword, testIP)
+		assert.NoError(t, err)
+	})
+
+	t.Run("a block ends after 15 minutes", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "abel@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		failLogins(t, svc, "abel@example.pt", testIP, 5)
+
+		_, err = pool.Exec(ctx, `
+			UPDATE login_attempts SET
+				window_started_at = window_started_at - interval '15 minutes',
+				blocked_until = blocked_until - interval '15 minutes'
+			WHERE email = 'abel@example.pt'`)
+		require.NoError(t, err)
+
+		_, _, err = svc.Login(ctx, "abel@example.pt", testPassword, testIP)
+		assert.NoError(t, err)
+	})
+
+	t.Run("failures spread over more than 15 minutes don't block", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "beto@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		failLogins(t, svc, "beto@example.pt", testIP, 4)
+
+		_, err = pool.Exec(ctx, `
+			UPDATE login_attempts SET window_started_at = window_started_at - interval '15 minutes'
+			WHERE email = 'beto@example.pt'`)
+		require.NoError(t, err)
+
+		failLogins(t, svc, "beto@example.pt", testIP, 4)
+		_, _, err = svc.Login(ctx, "beto@example.pt", testPassword, testIP)
+		assert.NoError(t, err)
+	})
+
+	t.Run("of many concurrent wrong passwords, only five are checked", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "celia@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		var errs [20]error
+		var wg sync.WaitGroup
+		for i := range errs {
+			wg.Go(func() { _, _, errs[i] = svc.Login(ctx, "celia@example.pt", "not the right password", testIP) })
+		}
+		wg.Wait()
+
+		var checked, blocked int
+		for _, err := range errs {
+			switch {
+			case errors.Is(err, ErrInvalidCredentials):
+				checked++
+			case errors.Is(err, ErrTooManyLoginAttempts):
+				blocked++
+			default:
+				t.Errorf("unexpected error: %v", err)
+			}
+		}
+		assert.Equal(t, 5, checked)
+		assert.Equal(t, 15, blocked)
+	})
+
+	t.Run("a login that ends without checking the password isn't counted", func(t *testing.T) {
+		user, _, err := svc.Register(ctx, "dario@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		// Verify fails on a hash it didn't make, as it does when the caller gives up
+		// waiting for a hashing slot.
+		_, err = pool.Exec(ctx, "UPDATE users SET password_hash = 'not a hash' WHERE id = $1", user.ID)
+		require.NoError(t, err)
+
+		for range 6 {
+			_, _, err = svc.Login(ctx, "dario@example.pt", testPassword, testIP)
+			require.Error(t, err)
+			require.NotErrorIs(t, err, ErrTooManyLoginAttempts)
+			require.NotErrorIs(t, err, ErrInvalidCredentials)
+		}
+		var attempts int
+		err = pool.QueryRow(ctx, "SELECT attempts FROM login_attempts WHERE email = 'dario@example.pt'").Scan(&attempts)
+		require.NoError(t, err)
+		assert.Zero(t, attempts)
 	})
 
 	t.Run("get a registered user", func(t *testing.T) {
@@ -217,7 +336,7 @@ func TestService(t *testing.T) {
 
 		// A missing lock lets both through only some of the time.
 		for range 20 {
-			_, tokens, err := svc.Login(ctx, "miguel@example.pt", testPassword)
+			_, tokens, err := svc.Login(ctx, "miguel@example.pt", testPassword, testIP)
 			require.NoError(t, err)
 
 			var results [2]Tokens
@@ -260,9 +379,9 @@ func TestService(t *testing.T) {
 	t.Run("logout revokes its own session only", func(t *testing.T) {
 		_, _, err := svc.Register(ctx, "olga@example.pt", testPassword, RoleRider)
 		require.NoError(t, err)
-		_, phone, err := svc.Login(ctx, "olga@example.pt", testPassword)
+		_, phone, err := svc.Login(ctx, "olga@example.pt", testPassword, testIP)
 		require.NoError(t, err)
-		_, laptop, err := svc.Login(ctx, "olga@example.pt", testPassword)
+		_, laptop, err := svc.Login(ctx, "olga@example.pt", testPassword, testIP)
 		require.NoError(t, err)
 
 		require.NoError(t, svc.Logout(ctx, phone.Refresh.Value))
@@ -305,9 +424,9 @@ func TestService(t *testing.T) {
 		assert.Equal(t, 3600, validSeconds)
 
 		require.NoError(t, svc.ResetPassword(ctx, email.token, "a brand new long password"))
-		_, _, err = svc.Login(ctx, "quim@example.pt", testPassword)
+		_, _, err = svc.Login(ctx, "quim@example.pt", testPassword, testIP)
 		assert.ErrorIs(t, err, ErrInvalidCredentials)
-		_, _, err = svc.Login(ctx, "quim@example.pt", "a brand new long password")
+		_, _, err = svc.Login(ctx, "quim@example.pt", "a brand new long password", testIP)
 		assert.NoError(t, err)
 
 		err = svc.ResetPassword(ctx, email.token, "another long enough password")
@@ -317,7 +436,7 @@ func TestService(t *testing.T) {
 	t.Run("a reset revokes every session of the user, and no one else's", func(t *testing.T) {
 		_, phone, err := svc.Register(ctx, "rita@example.pt", testPassword, RoleRider)
 		require.NoError(t, err)
-		_, laptop, err := svc.Login(ctx, "rita@example.pt", testPassword)
+		_, laptop, err := svc.Login(ctx, "rita@example.pt", testPassword, testIP)
 		require.NoError(t, err)
 		_, other, err := svc.Register(ctx, "sara@example.pt", testPassword, RoleRider)
 		require.NoError(t, err)
@@ -367,7 +486,7 @@ func TestService(t *testing.T) {
 			err := svc.ResetPassword(ctx, token, "a brand new long password")
 			assert.ErrorIs(t, err, ErrInvalidResetToken)
 		}
-		_, _, err = svc.Login(ctx, "ursula@example.pt", testPassword)
+		_, _, err = svc.Login(ctx, "ursula@example.pt", testPassword, testIP)
 		assert.NoError(t, err)
 	})
 
@@ -488,4 +607,13 @@ func countSessions(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID) int {
 	err := pool.QueryRow(t.Context(), "SELECT count(*) FROM sessions WHERE user_id = $1", userID).Scan(&n)
 	require.NoError(t, err)
 	return n
+}
+
+// failLogins logs in n times with a wrong password, each failing as wrong credentials.
+func failLogins(t *testing.T, svc *Service, email string, clientIP netip.Addr, n int) {
+	t.Helper()
+	for i := range n {
+		_, _, err := svc.Login(t.Context(), email, "not the right password", clientIP)
+		require.ErrorIs(t, err, ErrInvalidCredentials, "failure %d", i+1)
+	}
 }

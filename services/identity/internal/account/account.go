@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,7 +54,13 @@ var (
 	ErrInvalidRefreshToken = errors.New("refresh token is invalid or expired")
 	// Shown to the user, for unknown, used and expired tokens alike.
 	ErrInvalidResetToken = errors.New("password reset link is invalid or expired")
+	// Shown to the user, for registered and unknown emails alike.
+	ErrTooManyLoginAttempts = errors.New("too many failed logins: try again later")
 )
+
+// After this many failed logins for one email from one address within 15 minutes, that
+// pair is blocked for 15 minutes. The windows are in queries/login_attempts.sql.
+const maxLoginFailures = 5
 
 const uniqueViolation = "23505"
 
@@ -115,30 +122,36 @@ func (s *Service) Register(ctx context.Context, email, pw string, role Role) (Us
 	return user, tokens, nil
 }
 
-func (s *Service) Login(ctx context.Context, email, pw string) (User, Tokens, error) {
-	row, err := s.queries.GetUserByEmail(ctx, email)
-	if errors.Is(err, pgx.ErrNoRows) {
-		if err := s.hasher.VerifyDummy(ctx, pw); err != nil {
-			return User{}, Tokens{}, fmt.Errorf("verify password: %w", err)
-		}
-		return User{}, Tokens{}, ErrInvalidCredentials
-	}
+// Login checks the password and starts a session. Failed logins count per email and
+// client address, registered or not, and a pair over the limit gets
+// ErrTooManyLoginAttempts without its password being checked.
+func (s *Service) Login(ctx context.Context, email, pw string, clientIP netip.Addr) (User, Tokens, error) {
+	// Counted before the password is checked, and each concurrent attempt gets its own
+	// count, so a burst of guesses can't all get through while the pair is under the
+	// limit. Only the first maxLoginFailures in a window are checked.
+	attempt, err := s.queries.CountLoginAttempt(ctx, db.CountLoginAttemptParams{Email: email, Ip: clientIP})
 	if err != nil {
-		return User{}, Tokens{}, fmt.Errorf("get user: %w", err)
+		return User{}, Tokens{}, fmt.Errorf("count login attempt: %w", err)
+	}
+	if attempt.Blocked || attempt.Attempts > maxLoginFailures {
+		return User{}, Tokens{}, ErrTooManyLoginAttempts
 	}
 
-	err = s.hasher.Verify(ctx, pw, row.PasswordHash)
-	if errors.Is(err, password.ErrMismatch) {
-		return User{}, Tokens{}, ErrInvalidCredentials
+	user, err := s.checkPassword(ctx, email, pw)
+	if errors.Is(err, ErrInvalidCredentials) {
+		return User{}, Tokens{}, s.loginFailed(ctx, email, clientIP)
 	}
 	if err != nil {
-		return User{}, Tokens{}, fmt.Errorf("verify password: %w", err)
+		s.releaseLoginAttempt(ctx, email, clientIP)
+		return User{}, Tokens{}, err
 	}
 
-	user := User{ID: row.ID, Email: row.Email, Role: Role(row.Role)}
 	var refresh Token
 	err = s.inTx(ctx, func(q *db.Queries) error {
-		var err error
+		err := q.ClearLoginAttempts(ctx, db.ClearLoginAttemptsParams{Email: email, Ip: clientIP})
+		if err != nil {
+			return fmt.Errorf("clear login attempts: %w", err)
+		}
 		refresh, err = startSession(ctx, q, user.ID)
 		return err
 	})
@@ -151,6 +164,53 @@ func (s *Service) Login(ctx context.Context, email, pw string) (User, Tokens, er
 		return User{}, Tokens{}, err
 	}
 	return user, tokens, nil
+}
+
+// checkPassword returns the user the email and password belong to, or
+// ErrInvalidCredentials. An unknown email takes as long as a wrong password.
+func (s *Service) checkPassword(ctx context.Context, email, pw string) (User, error) {
+	row, err := s.queries.GetUserByEmail(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := s.hasher.VerifyDummy(ctx, pw); err != nil {
+			return User{}, fmt.Errorf("verify password: %w", err)
+		}
+		return User{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("get user: %w", err)
+	}
+
+	err = s.hasher.Verify(ctx, pw, row.PasswordHash)
+	if errors.Is(err, password.ErrMismatch) {
+		return User{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("verify password: %w", err)
+	}
+	return User{ID: row.ID, Email: row.Email, Role: Role(row.Role)}, nil
+}
+
+// loginFailed blocks the pair if this was its last allowed failure, and returns
+// ErrInvalidCredentials. The attempt has already been counted.
+func (s *Service) loginFailed(ctx context.Context, email string, clientIP netip.Addr) error {
+	err := s.queries.BlockLoginAttempts(ctx, db.BlockLoginAttemptsParams{Email: email, Ip: clientIP, MaxAttempts: maxLoginFailures})
+	if err != nil {
+		return fmt.Errorf("block login attempts: %w", err)
+	}
+	return ErrInvalidCredentials
+}
+
+// releaseLoginAttempt stops counting an attempt that ended without an answer: the caller
+// gave up waiting for a hashing slot, say. Otherwise a user retrying under load would be
+// locked out by attempts that never checked a password. Not on ctx, which may be what
+// ended. If this fails, the attempt counts until its window ends.
+func (s *Service) releaseLoginAttempt(ctx context.Context, email string, clientIP netip.Addr) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cancel()
+	err := s.queries.ReleaseLoginAttempt(ctx, db.ReleaseLoginAttemptParams{Email: email, Ip: clientIP})
+	if err != nil {
+		log.Printf("release login attempt: %v", err)
+	}
 }
 
 // Refresh marks the refresh token used and returns new tokens for the same session.

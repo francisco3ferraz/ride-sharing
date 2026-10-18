@@ -22,6 +22,13 @@ service IdentityService {
   // a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
   // pass only an ID they've authenticated, such as a verified access token's subject.
   rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  // Emails the user a link to reset their password, if the email is registered. It
+  // succeeds either way, so the caller can't tell which emails are.
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
+  // Sets a new password with the token from a reset link, and revokes every session of
+  // the user. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
+  // and for a password that breaks the rule.
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
 }
 
 enum Role {
@@ -98,3 +105,17 @@ message GetUserRequest {
 message GetUserResponse {
   User user = 1;
 }
+
+message RequestPasswordResetRequest {
+  string email = 1;
+}
+
+message RequestPasswordResetResponse {}
+
+// The token is a secret: never log it.
+message ResetPasswordRequest {
+  string token = 1;
+  string password = 2;
+}
+
+message ResetPasswordResponse {}

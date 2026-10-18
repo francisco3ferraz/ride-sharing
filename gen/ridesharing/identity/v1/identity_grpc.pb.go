@@ -19,11 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IdentityService_Register_FullMethodName = "/ridesharing.identity.v1.IdentityService/Register"
-	IdentityService_Login_FullMethodName    = "/ridesharing.identity.v1.IdentityService/Login"
-	IdentityService_Refresh_FullMethodName  = "/ridesharing.identity.v1.IdentityService/Refresh"
-	IdentityService_Logout_FullMethodName   = "/ridesharing.identity.v1.IdentityService/Logout"
-	IdentityService_GetUser_FullMethodName  = "/ridesharing.identity.v1.IdentityService/GetUser"
+	IdentityService_Register_FullMethodName             = "/ridesharing.identity.v1.IdentityService/Register"
+	IdentityService_Login_FullMethodName                = "/ridesharing.identity.v1.IdentityService/Login"
+	IdentityService_Refresh_FullMethodName              = "/ridesharing.identity.v1.IdentityService/Refresh"
+	IdentityService_Logout_FullMethodName               = "/ridesharing.identity.v1.IdentityService/Logout"
+	IdentityService_GetUser_FullMethodName              = "/ridesharing.identity.v1.IdentityService/GetUser"
+	IdentityService_RequestPasswordReset_FullMethodName = "/ridesharing.identity.v1.IdentityService/RequestPasswordReset"
+	IdentityService_ResetPassword_FullMethodName        = "/ridesharing.identity.v1.IdentityService/ResetPassword"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -48,6 +50,13 @@ type IdentityServiceClient interface {
 	// a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
 	// pass only an ID they've authenticated, such as a verified access token's subject.
 	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*GetUserResponse, error)
+	// Emails the user a link to reset their password, if the email is registered. It
+	// succeeds either way, so the caller can't tell which emails are.
+	RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error)
+	// Sets a new password with the token from a reset link, and revokes every session of
+	// the user. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
+	// and for a password that breaks the rule.
+	ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error)
 }
 
 type identityServiceClient struct {
@@ -108,6 +117,26 @@ func (c *identityServiceClient) GetUser(ctx context.Context, in *GetUserRequest,
 	return out, nil
 }
 
+func (c *identityServiceClient) RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestPasswordResetResponse)
+	err := c.cc.Invoke(ctx, IdentityService_RequestPasswordReset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetPasswordResponse)
+	err := c.cc.Invoke(ctx, IdentityService_ResetPassword_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations must embed UnimplementedIdentityServiceServer
 // for forward compatibility.
@@ -130,6 +159,13 @@ type IdentityServiceServer interface {
 	// a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
 	// pass only an ID they've authenticated, such as a verified access token's subject.
 	GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error)
+	// Emails the user a link to reset their password, if the email is registered. It
+	// succeeds either way, so the caller can't tell which emails are.
+	RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error)
+	// Sets a new password with the token from a reset link, and revokes every session of
+	// the user. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
+	// and for a password that breaks the rule.
+	ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error)
 	mustEmbedUnimplementedIdentityServiceServer()
 }
 
@@ -154,6 +190,12 @@ func (UnimplementedIdentityServiceServer) Logout(context.Context, *LogoutRequest
 }
 func (UnimplementedIdentityServiceServer) GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUser not implemented")
+}
+func (UnimplementedIdentityServiceServer) RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestPasswordReset not implemented")
+}
+func (UnimplementedIdentityServiceServer) ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetPassword not implemented")
 }
 func (UnimplementedIdentityServiceServer) mustEmbedUnimplementedIdentityServiceServer() {}
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue()                         {}
@@ -266,6 +308,42 @@ func _IdentityService_GetUser_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_RequestPasswordReset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestPasswordResetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).RequestPasswordReset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_RequestPasswordReset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).RequestPasswordReset(ctx, req.(*RequestPasswordResetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_ResetPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetPasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).ResetPassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_ResetPassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).ResetPassword(ctx, req.(*ResetPasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IdentityService_ServiceDesc is the grpc.ServiceDesc for IdentityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -292,6 +370,14 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetUser",
 			Handler:    _IdentityService_GetUser_Handler,
+		},
+		{
+			MethodName: "RequestPasswordReset",
+			Handler:    _IdentityService_RequestPasswordReset_Handler,
+		},
+		{
+			MethodName: "ResetPassword",
+			Handler:    _IdentityService_ResetPassword_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

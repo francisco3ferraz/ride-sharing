@@ -101,11 +101,15 @@ func run() error {
 		return fmt.Errorf("trace valkey: %w", err)
 	}
 
+	limiter, err := ratelimit.New(valkey)
+	if err != nil {
+		return err
+	}
 	handler := httpapi.NewHandler(
 		pricingv1.NewPricingServiceClient(pricingConn),
 		identityv1.NewIdentityServiceClient(identityConn),
 		verifier,
-		ratelimit.New(valkey),
+		limiter,
 		httpapi.Limits{IP: cfg.IPLimit},
 	)
 	routes, err := handler.Routes()

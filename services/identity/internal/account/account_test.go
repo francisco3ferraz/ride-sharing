@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"crypto/ed25519"
 	"os"
 	"slices"
@@ -49,7 +50,8 @@ func TestService(t *testing.T) {
 
 	pub, key, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	svc := New(pool, password.New(), accesstoken.New(key, time.Now))
+	mailer := &fakeMailer{sent: make(chan sentEmail, 10)}
+	svc := New(pool, password.New(), accesstoken.New(key, time.Now), mailer)
 
 	t.Run("register, then log in with the email in another case", func(t *testing.T) {
 		registered, _, err := svc.Register(ctx, "ana@example.pt", testPassword, RoleRider)
@@ -286,6 +288,148 @@ func TestService(t *testing.T) {
 			assert.NoError(t, svc.Logout(ctx, token))
 		}
 	})
+
+	t.Run("a reset link, asked for in another case, replaces the password once", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "quim@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		require.NoError(t, svc.RequestPasswordReset(ctx, "Quim@Example.pt"))
+		email := nextEmail(t, mailer)
+		assert.Equal(t, "quim@example.pt", email.to)
+		hash := refreshtoken.Hash(email.token)
+		var validSeconds int
+		err = pool.QueryRow(ctx, `
+			SELECT extract(epoch FROM expires_at - created_at)::int
+			FROM password_reset_tokens WHERE token_hash = $1`, hash[:]).Scan(&validSeconds)
+		require.NoError(t, err, "no reset token stored under the token's hash")
+		assert.Equal(t, 3600, validSeconds)
+
+		require.NoError(t, svc.ResetPassword(ctx, email.token, "a brand new long password"))
+		_, _, err = svc.Login(ctx, "quim@example.pt", testPassword)
+		assert.ErrorIs(t, err, ErrInvalidCredentials)
+		_, _, err = svc.Login(ctx, "quim@example.pt", "a brand new long password")
+		assert.NoError(t, err)
+
+		err = svc.ResetPassword(ctx, email.token, "another long enough password")
+		assert.ErrorIs(t, err, ErrInvalidResetToken)
+	})
+
+	t.Run("a reset revokes every session of the user, and no one else's", func(t *testing.T) {
+		_, phone, err := svc.Register(ctx, "rita@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		_, laptop, err := svc.Login(ctx, "rita@example.pt", testPassword)
+		require.NoError(t, err)
+		_, other, err := svc.Register(ctx, "sara@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		require.NoError(t, svc.RequestPasswordReset(ctx, "rita@example.pt"))
+		require.NoError(t, svc.ResetPassword(ctx, nextEmail(t, mailer).token, "a brand new long password"))
+
+		_, err = svc.Refresh(ctx, phone.Refresh.Value)
+		assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+		_, err = svc.Refresh(ctx, laptop.Refresh.Value)
+		assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+		_, err = svc.Refresh(ctx, other.Refresh.Value)
+		assert.NoError(t, err)
+	})
+
+	t.Run("a reset for an unknown email sends nothing, and doesn't fail", func(t *testing.T) {
+		require.NoError(t, svc.RequestPasswordReset(ctx, "nobody@example.pt"))
+		// No goroutine started, so there's nothing to wait for.
+		assert.Empty(t, mailer.sent)
+	})
+
+	t.Run("asking for another reset link makes the older one stop working", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "tiago@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		// Each email is awaited before the next request, since sends can finish in any order.
+		require.NoError(t, svc.RequestPasswordReset(ctx, "tiago@example.pt"))
+		first := nextEmail(t, mailer)
+		require.NoError(t, svc.RequestPasswordReset(ctx, "tiago@example.pt"))
+		second := nextEmail(t, mailer)
+
+		err = svc.ResetPassword(ctx, first.token, "a brand new long password")
+		assert.ErrorIs(t, err, ErrInvalidResetToken)
+		assert.NoError(t, svc.ResetPassword(ctx, second.token, "a brand new long password"))
+	})
+
+	t.Run("a reset rejects unknown, empty and expired tokens", func(t *testing.T) {
+		user, _, err := svc.Register(ctx, "ursula@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		expired, expiredHash := refreshtoken.Generate()
+		_, err = pool.Exec(ctx, `
+			INSERT INTO password_reset_tokens (token_hash, user_id, expires_at)
+			VALUES ($1, $2, now() - interval '1 second')`, expiredHash[:], user.ID)
+		require.NoError(t, err)
+
+		for _, token := range []string{"not a token", "", expired} {
+			err := svc.ResetPassword(ctx, token, "a brand new long password")
+			assert.ErrorIs(t, err, ErrInvalidResetToken)
+		}
+		_, _, err = svc.Login(ctx, "ursula@example.pt", testPassword)
+		assert.NoError(t, err)
+	})
+
+	t.Run("a new password that breaks the rule leaves the link working", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "vasco@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		require.NoError(t, svc.RequestPasswordReset(ctx, "vasco@example.pt"))
+		token := nextEmail(t, mailer).token
+
+		err = svc.ResetPassword(ctx, token, "too short")
+		assert.ErrorIs(t, err, password.ErrInvalid)
+		assert.NoError(t, svc.ResetPassword(ctx, token, "a brand new long password"))
+	})
+
+	t.Run("of two concurrent resets with one link, only one succeeds", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "xavier@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		// Both pass the check before hashing, so only the UPDATE can stop the second.
+		for range 3 {
+			require.NoError(t, svc.RequestPasswordReset(ctx, "xavier@example.pt"))
+			token := nextEmail(t, mailer).token
+
+			var errs [2]error
+			var wg sync.WaitGroup
+			for i := range 2 {
+				wg.Go(func() { errs[i] = svc.ResetPassword(ctx, token, "a brand new long password") })
+			}
+			wg.Wait()
+
+			winner := slices.IndexFunc(errs[:], func(err error) bool { return err == nil })
+			require.NotEqual(t, -1, winner, "neither reset succeeded: %v", errs)
+			require.ErrorIs(t, errs[1-winner], ErrInvalidResetToken)
+		}
+	})
+}
+
+// fakeMailer hands each email to the test through sent, since the service sends them in
+// the background.
+type fakeMailer struct {
+	sent chan sentEmail
+}
+
+type sentEmail struct {
+	to    string
+	token string
+}
+
+func (f *fakeMailer) SendPasswordReset(_ context.Context, to, token string) error {
+	f.sent <- sentEmail{to: to, token: token}
+	return nil
+}
+
+func nextEmail(t *testing.T, mailer *fakeMailer) sentEmail {
+	t.Helper()
+	select {
+	case email := <-mailer.sent:
+		return email
+	case <-time.After(5 * time.Second):
+		t.Fatal("no email sent")
+		return sentEmail{}
+	}
 }
 
 // assertTokens checks that the access token verifies as the Edge will verify it, and that

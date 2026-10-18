@@ -1,5 +1,5 @@
-// Package account registers users, and starts, refreshes and ends their sessions. It
-// knows nothing about gRPC.
+// Package account registers users, starts, refreshes and ends their sessions, and resets
+// their passwords. It knows nothing about gRPC.
 package account
 
 import (
@@ -51,6 +51,8 @@ var (
 	// For every rejected refresh token alike, so the client can't tell when reuse
 	// detection fired.
 	ErrInvalidRefreshToken = errors.New("refresh token is invalid or expired")
+	// Shown to the user, for unknown, used and expired tokens alike.
+	ErrInvalidResetToken = errors.New("password reset link is invalid or expired")
 )
 
 const uniqueViolation = "23505"
@@ -61,15 +63,21 @@ type DB interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
+// Mailer is what Service needs from *email.Sender, so tests can replace it.
+type Mailer interface {
+	SendPasswordReset(ctx context.Context, to, token string) error
+}
+
 type Service struct {
 	db      DB
 	queries *db.Queries
 	hasher  *password.Hasher
 	signer  *accesstoken.Signer
+	mailer  Mailer
 }
 
-func New(database DB, hasher *password.Hasher, signer *accesstoken.Signer) *Service {
-	return &Service{db: database, queries: db.New(database), hasher: hasher, signer: signer}
+func New(database DB, hasher *password.Hasher, signer *accesstoken.Signer, mailer Mailer) *Service {
+	return &Service{db: database, queries: db.New(database), hasher: hasher, signer: signer, mailer: mailer}
 }
 
 func (s *Service) Register(ctx context.Context, email, pw string, role Role) (User, Tokens, error) {
@@ -201,6 +209,77 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 		return fmt.Errorf("revoke session: %w", err)
 	}
 	return nil
+}
+
+// RequestPasswordReset emails the user a link to reset their password. An unknown email
+// isn't an error, so the caller can't tell which emails are registered.
+func (s *Service) RequestPasswordReset(ctx context.Context, email string) error {
+	row, err := s.queries.GetUserByEmail(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	// A reset token is made and stored like a refresh token: random, and kept only as a
+	// hash.
+	token, hash := refreshtoken.Generate()
+	err = s.queries.CreatePasswordResetToken(ctx, db.CreatePasswordResetTokenParams{UserID: row.ID, TokenHash: hash[:]})
+	if err != nil {
+		return fmt.Errorf("create password reset token: %w", err)
+	}
+
+	// Sent in the background, so a registered email gets its answer as fast as an
+	// unknown one. Not on ctx, which gRPC cancels when this returns. If the pod stops
+	// before it's sent, the email is lost and the user asks again.
+	go s.sendPasswordReset(context.WithoutCancel(ctx), row.ID, row.Email, token)
+	return nil
+}
+
+func (s *Service) sendPasswordReset(ctx context.Context, userID uuid.UUID, email, token string) {
+	if err := s.mailer.SendPasswordReset(ctx, email, token); err != nil {
+		log.Printf("send password reset email to user %s: %v", userID, err)
+	}
+}
+
+// ResetPassword sets a new password with a reset link's token, and revokes every session
+// of the user. Access tokens already issued keep working until they expire.
+func (s *Service) ResetPassword(ctx context.Context, token, pw string) error {
+	hash := refreshtoken.Hash(token)
+
+	// Checked before hashing, which can wait for a slot that logins need too, so a
+	// made-up token costs one query rather than a hash.
+	usable, err := s.queries.PasswordResetTokenUsable(ctx, hash[:])
+	if err != nil {
+		return fmt.Errorf("check password reset token: %w", err)
+	}
+	if !usable {
+		return ErrInvalidResetToken
+	}
+	passwordHash, err := s.hasher.Hash(ctx, pw)
+	if err != nil {
+		// Unwrapped: a password rule error's message is shown to the user.
+		return err
+	}
+
+	return s.inTx(ctx, func(q *db.Queries) error {
+		// The check above can be stale: the token may have been used or expired since.
+		userID, err := q.UsePasswordResetToken(ctx, hash[:])
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidResetToken
+		}
+		if err != nil {
+			return fmt.Errorf("use password reset token: %w", err)
+		}
+		if err := q.UpdateUserPassword(ctx, db.UpdateUserPasswordParams{ID: userID, PasswordHash: passwordHash}); err != nil {
+			return fmt.Errorf("update password: %w", err)
+		}
+		if err := q.RevokeUserSessions(ctx, userID); err != nil {
+			return fmt.Errorf("revoke sessions: %w", err)
+		}
+		return nil
+	})
 }
 
 func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {

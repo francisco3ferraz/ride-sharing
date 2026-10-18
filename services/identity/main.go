@@ -20,6 +20,7 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/accesstoken"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/account"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/config"
+	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/email"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/grpcapi"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/httpapi"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/password"
@@ -85,7 +86,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	accounts := account.New(pool, password.New(), signer)
+	mailer, err := email.New(cfg.SMTPHost, cfg.SMTPPort, cfg.MailFrom, cfg.WebURL)
+	if err != nil {
+		return err
+	}
+	accounts := account.New(pool, password.New(), signer, mailer)
 
 	grpcLis, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {

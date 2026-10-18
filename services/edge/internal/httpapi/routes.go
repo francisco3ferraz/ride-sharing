@@ -52,7 +52,7 @@ func (h *Handler) Routes() (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.Handle("/v1/", findClientIP(rejectCrossOrigin(h.authenticate(limitBody(validate(apiMux))))))
+	mux.Handle("/v1/", findClientIP(h.limitIP(rejectCrossOrigin(h.authenticate(limitBody(validate(apiMux)))))))
 
 	return otelhttp.NewHandler(mux, "edge",
 		// Kubernetes probes /healthz every few seconds; those spans would flood Jaeger.

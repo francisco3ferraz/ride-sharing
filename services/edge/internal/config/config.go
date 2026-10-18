@@ -1,7 +1,14 @@
 // Package config loads the Edge's settings from environment variables.
 package config
 
-import "github.com/caarlos0/env/v11"
+import (
+	"fmt"
+	"time"
+
+	"github.com/caarlos0/env/v11"
+
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/ratelimit"
+)
 
 type Config struct {
 	ListenAddr   string `env:"LISTEN_ADDR" envDefault:":8080"`
@@ -15,8 +22,29 @@ type Config struct {
 	// which the Tiltfile generates.
 	ValkeyUsername string `env:"VALKEY_USERNAME" envDefault:"edge"`
 	ValkeyPassword string `env:"VALKEY_PASSWORD"`
+
+	// Each rate limit reads <prefix>RATE, <prefix>BURST and <prefix>PERIOD, a Go
+	// duration such as 1s or 1h. Load sets their defaults.
+	IPLimit ratelimit.Limit `envPrefix:"RATE_LIMIT_IP_"`
 }
 
 func Load() (Config, error) {
-	return env.ParseAs[Config]()
+	// envDefault on Limit's fields would give every limit the same values, so the
+	// defaults are set here. env.Parse keeps any field no variable is set for.
+	cfg := Config{
+		IPLimit: ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second},
+	}
+	if err := env.Parse(&cfg); err != nil {
+		return Config{}, err
+	}
+
+	limits := map[string]ratelimit.Limit{
+		"RATE_LIMIT_IP_": cfg.IPLimit,
+	}
+	for prefix, limit := range limits {
+		if err := limit.Validate(); err != nil {
+			return Config{}, fmt.Errorf("%s*: %w", prefix, err)
+		}
+	}
+	return cfg, nil
 }

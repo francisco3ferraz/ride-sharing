@@ -3,7 +3,10 @@ package httpapi
 import (
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
+	"strconv"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -44,6 +47,16 @@ func validationError(w http.ResponseWriter, message string, code int) {
 		return
 	}
 	writeProblem(w, code, message)
+}
+
+// tooManyRequests answers 429 for a used-up rate limit. Retry-After counts whole
+// seconds, so the wait is rounded up: rounded down, a client would retry straight into
+// another 429.
+func tooManyRequests(w http.ResponseWriter, retryAfter time.Duration) {
+	seconds := max(1, int(math.Ceil(retryAfter.Seconds())))
+	// Before writeProblem writes the status line, after which a new header is dropped.
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	writeProblem(w, http.StatusTooManyRequests, "")
 }
 
 // about:blank means the status code says it all, so the title is its standard text.

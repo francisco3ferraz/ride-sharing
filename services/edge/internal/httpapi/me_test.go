@@ -21,7 +21,7 @@ func TestGetMe(t *testing.T) {
 	}
 	verifier := &fakeVerifier{claims: testClaims()}
 
-	rec := send(t, NewHandler(nil, identity, verifier), http.MethodGet, "/v1/me", "", testAccessToken)
+	rec := send(t, NewHandler(nil, identity, verifier, &fakeLimiter{}, Limits{}), http.MethodGet, "/v1/me", "", testAccessToken)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
@@ -49,7 +49,7 @@ func TestGetMeRequiresAccessToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			identity := &fakeIdentity{}
-			rec := send(t, NewHandler(nil, identity, tt.verifier), http.MethodGet, "/v1/me", "", tt.token)
+			rec := send(t, NewHandler(nil, identity, tt.verifier, &fakeLimiter{}, Limits{}), http.MethodGet, "/v1/me", "", tt.token)
 
 			assertProblem(t, rec, api.Problem{
 				Type:   "about:blank",
@@ -93,7 +93,7 @@ func TestGetMeMapsIdentityErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			verifier := &fakeVerifier{claims: testClaims()}
-			rec := send(t, NewHandler(nil, tt.identity, verifier), http.MethodGet, "/v1/me", "", testAccessToken)
+			rec := send(t, NewHandler(nil, tt.identity, verifier, &fakeLimiter{}, Limits{}), http.MethodGet, "/v1/me", "", testAccessToken)
 
 			assertProblem(t, rec, tt.want)
 		})
@@ -105,7 +105,7 @@ func TestGetMeMapsIdentityErrors(t *testing.T) {
 func TestGetMeWithoutClaims(t *testing.T) {
 	identity := &fakeIdentity{}
 
-	_, err := NewHandler(nil, identity, nil).GetMe(context.Background(), api.GetMeRequestObject{})
+	_, err := NewHandler(nil, identity, nil, &fakeLimiter{}, Limits{}).GetMe(context.Background(), api.GetMeRequestObject{})
 
 	require.Error(t, err)
 	assert.Nil(t, identity.gotGetUser)

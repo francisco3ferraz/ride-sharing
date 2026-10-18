@@ -228,7 +228,7 @@ func TestRefresh(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			identity := &fakeIdentity{tokens: testTokens()}
 			verifier := &fakeVerifier{err: errors.New("token has invalid claims: token is expired")}
-			rec := postCookies(t, NewHandler(nil, identity, verifier), "/v1/auth/refresh", tt.cookies...)
+			rec := postCookies(t, NewHandler(nil, identity, verifier, &fakeLimiter{}, Limits{}), "/v1/auth/refresh", tt.cookies...)
 
 			assert.Equal(t, http.StatusNoContent, rec.Code)
 			assert.Empty(t, rec.Body.String())
@@ -256,7 +256,7 @@ func TestLogout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			identity := &fakeIdentity{}
-			rec := postCookies(t, NewHandler(nil, identity, nil), "/v1/auth/logout", tt.cookies...)
+			rec := postCookies(t, NewHandler(nil, identity, nil, &fakeLimiter{}, Limits{}), "/v1/auth/logout", tt.cookies...)
 
 			assert.Equal(t, http.StatusNoContent, rec.Code)
 			assert.Empty(t, rec.Body.String())
@@ -551,7 +551,7 @@ func post(t *testing.T, identity identityv1.IdentityServiceClient, target, body 
 
 func postWithHeader(t *testing.T, identity identityv1.IdentityServiceClient, target, body string, header http.Header) *httptest.ResponseRecorder {
 	t.Helper()
-	routes, err := NewHandler(nil, identity, nil).Routes()
+	routes, err := NewHandler(nil, identity, nil, &fakeLimiter{}, Limits{}).Routes()
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(body))

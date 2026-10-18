@@ -23,6 +23,7 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/accesstoken"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/config"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/httpapi"
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/ratelimit"
 	"github.com/francisco3ferraz/ride-sharing/shared/telemetry"
 )
 
@@ -104,6 +105,8 @@ func run() error {
 		pricingv1.NewPricingServiceClient(pricingConn),
 		identityv1.NewIdentityServiceClient(identityConn),
 		verifier,
+		ratelimit.New(valkey),
+		httpapi.Limits{IP: cfg.IPLimit},
 	)
 	routes, err := handler.Routes()
 	if err != nil {

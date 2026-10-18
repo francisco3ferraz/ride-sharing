@@ -78,7 +78,7 @@ func TestAuthenticate(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 
-			NewHandler(nil, nil, tt.verifier).authenticate(next).ServeHTTP(rec, req)
+			NewHandler(nil, nil, tt.verifier, &fakeLimiter{}, Limits{}).authenticate(next).ServeHTTP(rec, req)
 
 			// Whatever the token, the request reaches next exactly once, and only next
 			// writes the response.
@@ -127,7 +127,7 @@ func TestPublicRoutesIgnoreRejectedTokens(t *testing.T) {
 	}
 	verifier := &fakeVerifier{err: errors.New("token is expired")}
 
-	rec := send(t, NewHandler(nil, identity, verifier), http.MethodPost, "/v1/auth/login", loginBody, testAccessToken)
+	rec := send(t, NewHandler(nil, identity, verifier, &fakeLimiter{}, Limits{}), http.MethodPost, "/v1/auth/login", loginBody, testAccessToken)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, []string{testAccessToken}, verifier.verified)

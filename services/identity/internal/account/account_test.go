@@ -254,6 +254,38 @@ func TestService(t *testing.T) {
 		_, err = svc.Refresh(ctx, tokens.Refresh.Value)
 		assert.NoError(t, err)
 	})
+
+	t.Run("logout revokes its own session only", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "olga@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		_, phone, err := svc.Login(ctx, "olga@example.pt", testPassword)
+		require.NoError(t, err)
+		_, laptop, err := svc.Login(ctx, "olga@example.pt", testPassword)
+		require.NoError(t, err)
+
+		require.NoError(t, svc.Logout(ctx, phone.Refresh.Value))
+
+		_, err = svc.Refresh(ctx, phone.Refresh.Value)
+		assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+		_, err = svc.Refresh(ctx, laptop.Refresh.Value)
+		assert.NoError(t, err)
+	})
+
+	t.Run("logout succeeds with tokens it can't refresh", func(t *testing.T) {
+		_, tokens, err := svc.Register(ctx, "paulo@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		refreshed, err := svc.Refresh(ctx, tokens.Refresh.Value)
+		require.NoError(t, err)
+
+		// A used token, as a stale tab sends, still ends the session.
+		require.NoError(t, svc.Logout(ctx, tokens.Refresh.Value))
+		_, err = svc.Refresh(ctx, refreshed.Refresh.Value)
+		assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+
+		for _, token := range []string{tokens.Refresh.Value, "not a token", ""} {
+			assert.NoError(t, svc.Logout(ctx, token))
+		}
+	})
 }
 
 // assertTokens checks that the access token verifies as the Edge will verify it, and that

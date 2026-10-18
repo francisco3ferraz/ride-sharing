@@ -1,5 +1,5 @@
-// Package account registers users, and starts and refreshes their sessions. It knows
-// nothing about gRPC.
+// Package account registers users, and starts, refreshes and ends their sessions. It
+// knows nothing about gRPC.
 package account
 
 import (
@@ -191,6 +191,16 @@ func (s *Service) Refresh(ctx context.Context, token string) (Tokens, error) {
 	}
 
 	return s.issue(row.UserID, Role(row.Role), refresh)
+}
+
+// Logout revokes the session the refresh token belongs to. An unknown token, or one
+// whose session is already revoked, isn't an error: the user ends up logged out anyway.
+func (s *Service) Logout(ctx context.Context, token string) error {
+	hash := refreshtoken.Hash(token)
+	if err := s.queries.RevokeSessionByRefreshToken(ctx, hash[:]); err != nil {
+		return fmt.Errorf("revoke session: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {

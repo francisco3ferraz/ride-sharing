@@ -1,0 +1,51 @@
+# Helm values for Valkey, installed by Tilt. Only what differs from the chart's
+# defaults is here; see them all with `helm show values valkey/valkey`.
+#
+# The chart's defaults fit otherwise: one standalone pod (a Deployment) behind the
+# valkey Service on port 6379, with its data in an emptyDir, so it starts empty after
+# every restart. That's on purpose: nothing kept here is the only copy of anything.
+# Its probes run `valkey-cli ping` without logging in. The reply is NOAUTH, but
+# valkey-cli still exits 0, so they check that Valkey answers, which is all they need.
+
+# Each service logs in as its own ACL user, limited to its own keys, as each has its
+# own Postgres role. Passwords come from the valkey-users Secret, which the Tiltfile
+# generates into secrets/, one key per user. The chart writes each user as
+# "user <name> on #<sha256 of the password> <permissions>".
+auth:
+  enabled: true
+  usersExistingSecret: valkey-users
+  aclUsers:
+    # The chart requires a default user: it's who a connection is before it logs in.
+    # "off" (after the chart's "on") disables it, so every client must name a user.
+    default:
+      permissions: "off resetkeys resetchannels -@all"
+    # For people, through valkey-cli in the pod: INFO, CONFIG GET, SCAN, ACL LOG.
+    admin:
+      permissions: "~* &* +@all"
+    # The Edge's rate limiter. redis_rate runs one Lua script (EVALSHA, then EVAL when
+    # Valkey hasn't cached it), and the script's TIME, GET and SET are checked against
+    # the caller's ACL too. Its keys all start with "rate:", which redis_rate adds.
+    # A command missing here fails with NOPERM, which the limiter treats like Valkey
+    # being down: it lets the request through. ACL LOG shows what was denied.
+    edge:
+      permissions: "resetkeys ~rate:* resetchannels -@all +ping +hello +client|setinfo +evalsha +eval +time +get +set"
+
+valkeyConfig: |
+  # Valkey snapshots to /data unless told not to. A snapshot would only bring stale
+  # counters back after a container restart, and forking to write one can briefly
+  # need twice the memory.
+  save ""
+  appendonly no
+  # Below the container's memory limit, so Valkey evicts keys rather than being
+  # OOM-killed and losing them all. volatile-lru evicts only keys with a TTL, such as
+  # rate-limit counters. Once none are left, writes fail and the limiter lets
+  # requests through.
+  maxmemory 96mb
+  maxmemory-policy volatile-lru
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    memory: 128Mi

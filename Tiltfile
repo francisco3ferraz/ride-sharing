@@ -10,6 +10,7 @@ GATEWAY_API_VERSION = 'v1.6.1'  # the version Traefik's chart documents
 TRAEFIK_CHART_VERSION = '41.7.1'
 CNPG_CHART_VERSION = '0.29.1'  # CloudNativePG operator 1.30.1
 MAILPIT_CHART_VERSION = '0.37.0'  # Mailpit 1.31.1
+VALKEY_CHART_VERSION = '0.12.0'  # Valkey 9.1.2
 
 
 # Platform: Gateway API, Traefik and the public Gateway.
@@ -122,6 +123,39 @@ k8s_yaml(kustomize('infra/k8s/platform/postgres'))
 k8s_resource('postgres', resource_deps=['cnpg', 'ride-sharing-namespace'], labels=['data'])
 
 
+def generated_password(name):
+    """The path of secrets/<name>.password, generated the first time it's needed."""
+    path = 'secrets/%s.password' % name
+    if not os.path.exists(path):
+        # Hex, so the password never needs escaping in a connection string.
+        local('mkdir -p secrets && openssl rand -hex 24 | tr -d "\\n" > %s' % path, quiet=True, echo_off=True)
+    return path
+
+
+# Valkey, a Redis-compatible store, holds only what services can afford to lose. Every
+# ACL user in its values needs a password here, under its own name, even the disabled
+# default user: the chart's init script fails without one.
+VALKEY_USERS = ['default', 'admin', 'edge']
+k8s_yaml(local(
+    'kubectl create secret generic valkey-users --namespace ride-sharing %s --dry-run=client -o yaml'
+    % ' '.join(['--from-file %s=%s' % (user, generated_password('valkey-' + user)) for user in VALKEY_USERS]),
+    quiet=True,
+    echo_off=True,
+))
+k8s_resource(new_name='valkey-users', objects=['valkey-users:secret'], resource_deps=['ride-sharing-namespace'], labels=['data'])
+
+helm_repo('valkey', 'https://valkey.io/valkey-helm/', resource_name='valkey-repo', labels=['data'])
+helm_resource(
+    'valkey',
+    'valkey/valkey',
+    namespace='ride-sharing',
+    flags=['--version', VALKEY_CHART_VERSION, '--values', 'infra/k8s/platform/valkey/values.yaml'],
+    deps=['infra/k8s/platform/valkey/values.yaml'],
+    resource_deps=['valkey-repo', 'valkey-users'],
+    labels=['data'],
+)
+
+
 # Services.
 
 k8s_yaml(kustomize('infra/k8s/overlays/local'))
@@ -130,10 +164,7 @@ k8s_resource(new_name='ride-sharing-namespace', objects=['ride-sharing:namespace
 
 def db_password_secret(role):
     """A Secret holding the Postgres password for `role`, generated once into secrets/."""
-    path = 'secrets/postgres-%s.password' % role
-    if not os.path.exists(path):
-        # Hex, so the password never needs escaping in a connection string.
-        local('mkdir -p secrets && openssl rand -hex 24 | tr -d "\\n" > %s' % path, quiet=True, echo_off=True)
+    path = generated_password('postgres-' + role)
     k8s_yaml(local(
         'kubectl create secret generic postgres-%s --namespace ride-sharing --type kubernetes.io/basic-auth --from-literal username=%s --from-file password=%s --dry-run=client -o yaml' % (role, role, path),
         quiet=True,

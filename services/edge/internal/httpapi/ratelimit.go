@@ -2,8 +2,13 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/clientip"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/ratelimit"
 )
@@ -29,6 +34,69 @@ func (h *Handler) limitUser(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// limitOperations is a strict-server middleware that applies the limits an operation
+// has of its own. It runs after the validator, with the decoded request, so a
+// malformed request isn't counted. That's fine: it never costs Identity a hash.
+func (h *Handler) limitOperations(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		for _, l := range h.operationLimits(ctx, operationID, request) {
+			if ok, retryAfter := h.limiter.Allow(ctx, l.name, l.key, l.limit); !ok {
+				return nil, rateLimitedError{retryAfter: retryAfter}
+			}
+		}
+		return next(ctx, w, r, request)
+	}
+}
+
+type operationLimit struct {
+	name  string
+	key   string
+	limit ratelimit.Limit
+}
+
+// operationLimits are checked in order, up to the first that's used up. operationID is
+// the generated Go name, not the spec's operationId.
+func (h *Handler) operationLimits(ctx context.Context, operationID string, request any) []operationLimit {
+	ip := ipKey(ctx)
+	switch operationID {
+	case "Login":
+		return []operationLimit{{name: "login", key: ip, limit: h.limits.Login}}
+	case "RegisterUser":
+		return []operationLimit{{name: "register", key: ip, limit: h.limits.Register}}
+	case "RequestPasswordReset":
+		// The generated code always passes this type for this operation.
+		email := request.(api.RequestPasswordResetRequestObject).Body.Email
+		// The address first, and the email only for requests it lets through. The other
+		// way round, an address over its limit could keep using up an email's few resets
+		// an hour, locking its owner out of them.
+		return []operationLimit{
+			{name: "reset", key: ip, limit: h.limits.ResetIP},
+			{name: "reset-email", key: emailKey(email), limit: h.limits.ResetEmail},
+		}
+	default:
+		return nil
+	}
+}
+
+// emailKey keeps addresses out of Valkey's keys, which SCAN and MONITOR show. The hash
+// isn't secret, since anyone with a list of addresses can hash them too, but these keys
+// expire within the hour. Trimmed and lowercased first, as Identity's citext compares
+// emails, so variants of one address share its limit.
+func emailKey(email string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(email))))
+	return hex.EncodeToString(sum[:])
+}
+
+// rateLimitedError is how limitOperations reports a used-up limit, so responseError
+// writes its 429 like every other response to an error.
+type rateLimitedError struct {
+	retryAfter time.Duration
+}
+
+func (rateLimitedError) Error() string {
+	return "rate limit used up"
 }
 
 // allow checks one limit, and answers 429 when it's used up.

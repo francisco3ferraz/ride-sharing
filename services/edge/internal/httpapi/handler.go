@@ -27,8 +27,12 @@ type RateLimiter interface {
 
 // Limits are the rate limits Handler applies.
 type Limits struct {
-	IP   ratelimit.Limit
-	User ratelimit.Limit
+	IP         ratelimit.Limit
+	User       ratelimit.Limit
+	Login      ratelimit.Limit
+	Register   ratelimit.Limit
+	ResetIP    ratelimit.Limit
+	ResetEmail ratelimit.Limit
 }
 
 type Handler struct {

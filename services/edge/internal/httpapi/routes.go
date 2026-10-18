@@ -42,7 +42,7 @@ func (h *Handler) Routes() (http.Handler, error) {
 		ErrorHandler:         validationError,
 	})
 
-	server := api.NewStrictHandlerWithOptions(h, nil, api.StrictHTTPServerOptions{
+	server := api.NewStrictHandlerWithOptions(h, []api.StrictMiddlewareFunc{h.limitOperations}, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  requestError,
 		ResponseErrorHandlerFunc: responseError,
 	})

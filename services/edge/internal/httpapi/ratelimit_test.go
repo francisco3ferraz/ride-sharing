@@ -3,8 +3,10 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -168,4 +170,131 @@ func serveWithLimits(t *testing.T, h *Handler, req *http.Request) *httptest.Resp
 	rec := httptest.NewRecorder()
 	routes.ServeHTTP(rec, req)
 	return rec
+}
+
+func TestLimitsOperations(t *testing.T) {
+	ip := ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second}
+	limits := Limits{
+		IP:         ip,
+		Login:      ratelimit.Limit{Rate: 10, Burst: 10, Period: time.Minute},
+		Register:   ratelimit.Limit{Rate: 5, Burst: 5, Period: time.Hour},
+		ResetIP:    ratelimit.Limit{Rate: 10, Burst: 10, Period: time.Hour},
+		ResetEmail: ratelimit.Limit{Rate: 3, Burst: 3, Period: time.Hour},
+	}
+	tests := []struct {
+		name       string
+		target     string
+		body       string
+		wantStatus int
+		wantChecks []limitCheck
+	}{
+		{
+			name:       "login",
+			target:     "/v1/auth/login",
+			body:       loginBody,
+			wantStatus: http.StatusOK,
+			wantChecks: []limitCheck{
+				{name: "ip", key: "203.0.113.7", limit: ip},
+				{name: "login", key: "203.0.113.7", limit: limits.Login},
+			},
+		},
+		{
+			name:       "register",
+			target:     "/v1/auth/register",
+			body:       `{"email": "ana@example.pt", "password": "a long enough password", "role": "rider"}`,
+			wantStatus: http.StatusCreated,
+			wantChecks: []limitCheck{
+				{name: "ip", key: "203.0.113.7", limit: ip},
+				{name: "register", key: "203.0.113.7", limit: limits.Register},
+			},
+		},
+		{
+			name:       "password reset, by address and by email",
+			target:     "/v1/auth/password-reset",
+			body:       `{"email": "ana@example.pt"}`,
+			wantStatus: http.StatusAccepted,
+			wantChecks: []limitCheck{
+				{name: "ip", key: "203.0.113.7", limit: ip},
+				{name: "reset", key: "203.0.113.7", limit: limits.ResetIP},
+				{name: "reset-email", key: emailKey("ana@example.pt"), limit: limits.ResetEmail},
+			},
+		},
+		{
+			name:       "malformed login isn't counted",
+			target:     "/v1/auth/login",
+			body:       `{"email": "ana@example.pt"}`,
+			wantStatus: http.StatusBadRequest,
+			wantChecks: []limitCheck{{name: "ip", key: "203.0.113.7", limit: ip}},
+		},
+		{
+			name:       "refresh has no limit of its own",
+			target:     "/v1/auth/refresh",
+			wantStatus: http.StatusNoContent,
+			wantChecks: []limitCheck{{name: "ip", key: "203.0.113.7", limit: ip}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			limiter := &fakeLimiter{}
+			identity := &fakeIdentity{
+				user:   &identityv1.User{Id: testUserID, Email: "ana@example.pt", Role: identityv1.Role_ROLE_RIDER},
+				tokens: testTokens(),
+			}
+
+			rec := postFrom(t, NewHandler(nil, identity, nil, limiter, limits), tt.target, tt.body, "203.0.113.7")
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Equal(t, tt.wantChecks, limiter.checks)
+		})
+	}
+}
+
+func TestOverAnOperationsLimitIsTooManyRequests(t *testing.T) {
+	limiter := &fakeLimiter{deny: map[string]time.Duration{"login": 30 * time.Second}}
+	identity := &fakeIdentity{}
+
+	rec := postFrom(t, NewHandler(nil, identity, nil, limiter, testLimits), "/v1/auth/login", loginBody, "203.0.113.7")
+
+	assertProblem(t, rec, api.Problem{Type: "about:blank", Title: "Too Many Requests", Status: http.StatusTooManyRequests})
+	assert.Equal(t, "30", rec.Header().Get("Retry-After"))
+	assert.Nil(t, identity.gotLogin, "identity should not be called")
+}
+
+func TestResetOverItsAddressLimitLeavesTheEmailsAlone(t *testing.T) {
+	limiter := &fakeLimiter{deny: map[string]time.Duration{"reset": time.Hour}}
+	identity := &fakeIdentity{}
+
+	rec := postFrom(t, NewHandler(nil, identity, nil, limiter, testLimits), "/v1/auth/password-reset", `{"email": "ana@example.pt"}`, "203.0.113.7")
+
+	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
+	for _, check := range limiter.checks {
+		assert.NotEqual(t, "reset-email", check.name)
+	}
+	assert.Nil(t, identity.gotRequestPasswordReset, "identity should not be called")
+}
+
+func TestEmailKey(t *testing.T) {
+	key := emailKey("ana@example.pt")
+
+	assert.Len(t, key, 64)
+	assert.NotContains(t, key, "ana")
+	assert.Equal(t, key, emailKey(" Ana@Example.PT "))
+	assert.NotEqual(t, key, emailKey("eva@example.pt"))
+}
+
+// postFrom sends a JSON body, or none, from a client at forwardedFor, through the real
+// routes.
+func postFrom(t *testing.T, h *Handler, target, body, forwardedFor string) *httptest.ResponseRecorder {
+	t.Helper()
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req := httptest.NewRequest(http.MethodPost, target, reader)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("X-Forwarded-For", forwardedFor)
+	return serveWithLimits(t, h, req)
 }

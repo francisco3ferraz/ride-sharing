@@ -110,7 +110,14 @@ func run() error {
 		identityv1.NewIdentityServiceClient(identityConn),
 		verifier,
 		limiter,
-		httpapi.Limits{IP: cfg.IPLimit, User: cfg.UserLimit},
+		httpapi.Limits{
+			IP:         cfg.IPLimit,
+			User:       cfg.UserLimit,
+			Login:      cfg.LoginLimit,
+			Register:   cfg.RegisterLimit,
+			ResetIP:    cfg.ResetIPLimit,
+			ResetEmail: cfg.ResetEmailLimit,
+		},
 	)
 	routes, err := handler.Routes()
 	if err != nil {

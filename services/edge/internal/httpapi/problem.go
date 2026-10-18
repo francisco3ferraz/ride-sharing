@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"math"
 	"net/http"
@@ -30,6 +31,11 @@ var clientErrorStatuses = map[codes.Code]int{
 // Handlers must return service errors unwrapped: for a wrapped error, gRPC's message
 // is the whole wrapped text.
 func responseError(w http.ResponseWriter, r *http.Request, err error) {
+	var limited rateLimitedError
+	if errors.As(err, &limited) {
+		tooManyRequests(w, limited.retryAfter)
+		return
+	}
 	if httpStatus, ok := clientErrorStatuses[status.Code(err)]; ok {
 		writeProblem(w, httpStatus, status.Convert(err).Message())
 		return

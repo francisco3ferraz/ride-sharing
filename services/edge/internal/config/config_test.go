@@ -11,7 +11,10 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/ratelimit"
 )
 
-var limitPrefixes = []string{"RATE_LIMIT_IP_", "RATE_LIMIT_USER_"}
+var limitPrefixes = []string{
+	"RATE_LIMIT_IP_", "RATE_LIMIT_USER_", "RATE_LIMIT_LOGIN_", "RATE_LIMIT_REGISTER_",
+	"RATE_LIMIT_RESET_IP_", "RATE_LIMIT_RESET_EMAIL_",
+}
 
 func TestLoadDefaults(t *testing.T) {
 	keys := []string{"LISTEN_ADDR", "PRICING_ADDR", "IDENTITY_ADDR", "IDENTITY_JWKS_URL", "VALKEY_ADDR", "VALKEY_USERNAME", "VALKEY_PASSWORD"}
@@ -36,6 +39,10 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Empty(t, cfg.ValkeyPassword)
 	assert.Equal(t, ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second}, cfg.IPLimit)
 	assert.Equal(t, ratelimit.Limit{Rate: 10, Burst: 20, Period: time.Second}, cfg.UserLimit)
+	assert.Equal(t, ratelimit.Limit{Rate: 10, Burst: 10, Period: time.Minute}, cfg.LoginLimit)
+	assert.Equal(t, ratelimit.Limit{Rate: 5, Burst: 5, Period: time.Hour}, cfg.RegisterLimit)
+	assert.Equal(t, ratelimit.Limit{Rate: 10, Burst: 10, Period: time.Hour}, cfg.ResetIPLimit)
+	assert.Equal(t, ratelimit.Limit{Rate: 3, Burst: 3, Period: time.Hour}, cfg.ResetEmailLimit)
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -65,6 +72,10 @@ func TestLoadFromEnv(t *testing.T) {
 	want := ratelimit.Limit{Rate: 7, Burst: 9, Period: time.Minute}
 	assert.Equal(t, want, cfg.IPLimit)
 	assert.Equal(t, want, cfg.UserLimit)
+	assert.Equal(t, want, cfg.LoginLimit)
+	assert.Equal(t, want, cfg.RegisterLimit)
+	assert.Equal(t, want, cfg.ResetIPLimit)
+	assert.Equal(t, want, cfg.ResetEmailLimit)
 }
 
 func TestLoadRejectsInvalidLimits(t *testing.T) {

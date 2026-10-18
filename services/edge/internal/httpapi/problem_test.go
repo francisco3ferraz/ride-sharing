@@ -52,6 +52,16 @@ func TestResponseError(t *testing.T) {
 			},
 		},
 		{
+			name: "locked-out login is shown to the client",
+			err:  status.Error(codes.ResourceExhausted, "too many failed logins: try again later"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Too Many Requests",
+				Status: http.StatusTooManyRequests,
+				Detail: new("too many failed logins: try again later"),
+			},
+		},
+		{
 			name: "internal failure is hidden from the client",
 			err:  status.Error(codes.Unavailable, "connection refused"),
 			want: api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},

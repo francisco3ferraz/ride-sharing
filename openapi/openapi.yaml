@@ -94,7 +94,10 @@ paths:
       summary: Checks an email and password, and starts a session for their user.
       description: >-
         An unknown email and a wrong password get the same 401, so the response doesn't
-        reveal which emails are registered.
+        reveal which emails are registered. Five failed logins for one email from one
+        address within 15 minutes lock that pair out for 15 minutes: its logins get a 429
+        with no Retry-After, registered email or not, until then or until a password
+        reset.
       security: []
       requestBody:
         required: true
@@ -297,8 +300,8 @@ components:
             $ref: "#/components/schemas/Problem"
     TooManyRequests:
       description: >-
-        A rate limit is used up, in the RFC 9457 problem details format. Retry-After says
-        when to try again.
+        A rate limit is used up, or a login is locked out, in the RFC 9457 problem details
+        format. For a rate limit, Retry-After says when to try again.
       headers:
         Retry-After:
           $ref: "#/components/headers/RetryAfter"

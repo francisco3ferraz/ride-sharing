@@ -22,10 +22,13 @@ func requestError(w http.ResponseWriter, _ *http.Request, err error) {
 
 // Services own the rules, so their messages for these codes are written for the client
 // and safe to show. Every other code, and any error that isn't from a service, is a 500.
+// gRPC itself also uses RESOURCE_EXHAUSTED, for a message over its 4 MB limit, which the
+// Edge's 64 KB bodies can't reach.
 var clientErrorStatuses = map[codes.Code]int{
-	codes.InvalidArgument: http.StatusBadRequest,
-	codes.Unauthenticated: http.StatusUnauthorized,
-	codes.AlreadyExists:   http.StatusConflict,
+	codes.InvalidArgument:   http.StatusBadRequest,
+	codes.Unauthenticated:   http.StatusUnauthorized,
+	codes.AlreadyExists:     http.StatusConflict,
+	codes.ResourceExhausted: http.StatusTooManyRequests,
 }
 
 // Handlers must return service errors unwrapped: for a wrapped error, gRPC's message

@@ -5,11 +5,20 @@
 package db
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type LoginAttempt struct {
+	Email           string
+	Ip              netip.Addr
+	Attempts        int32
+	WindowStartedAt time.Time
+	BlockedUntil    pgtype.Timestamptz
+}
 
 type PasswordResetToken struct {
 	TokenHash []byte

@@ -21,6 +21,7 @@ import (
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	pricingv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/pricing/v1"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/accesstoken"
+	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/clientip"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/config"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/httpapi"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/ratelimit"
@@ -164,6 +165,7 @@ func newConn(addr string) (*grpc.ClientConn, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		// Sends the current trace ID with every call.
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(clientip.UnaryClientInterceptor),
 	)
 }
 

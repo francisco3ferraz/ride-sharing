@@ -8,6 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestFromRequest(t *testing.T) {
@@ -56,4 +59,33 @@ func TestContext(t *testing.T) {
 	got, ok := FromContext(NewContext(context.Background(), addr))
 	assert.True(t, ok)
 	assert.Equal(t, addr, got)
+}
+
+func TestUnaryClientInterceptor(t *testing.T) {
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want []string
+	}{
+		{name: "with an address", ctx: NewContext(context.Background(), netip.MustParseAddr("2001:db8::1")), want: []string{"2001:db8::1"}},
+		{name: "without one", ctx: context.Background()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Metadata someone added earlier must survive.
+			ctx := metadata.AppendToOutgoingContext(tt.ctx, "earlier", "kept")
+			var got metadata.MD
+			invoker := func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+				got, _ = metadata.FromOutgoingContext(ctx)
+				return nil
+			}
+
+			err := UnaryClientInterceptor(ctx, "/ridesharing.identity.v1.IdentityService/Login", nil, nil, nil, invoker)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.Get(MetadataKey))
+			assert.Equal(t, []string{"kept"}, got.Get("earlier"))
+		})
+	}
 }

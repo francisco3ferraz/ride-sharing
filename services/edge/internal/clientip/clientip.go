@@ -1,5 +1,5 @@
 // Package clientip finds the address of the client that sent a request, and carries it
-// in the request's context.
+// in the request's context and on to the services the Edge calls.
 package clientip
 
 import (
@@ -7,7 +7,14 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
+
+// MetadataKey is the gRPC metadata entry the client's address goes in. Identity reads it
+// for its login lockout.
+const MetadataKey = "client-ip"
 
 // FromRequest returns the address Traefik received the request from, the last entry
 // Traefik appended to X-Forwarded-For. Anything before that entry came from the
@@ -48,4 +55,14 @@ func NewContext(ctx context.Context, addr netip.Addr) context.Context {
 func FromContext(ctx context.Context) (netip.Addr, bool) {
 	addr, ok := ctx.Value(contextKey{}).(netip.Addr)
 	return addr, ok
+}
+
+// UnaryClientInterceptor sends the address in ctx, when there is one, with every gRPC
+// call, so no handler has to remember to.
+func UnaryClientInterceptor(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	if addr, ok := FromContext(ctx); ok {
+		// Append, not NewOutgoingContext, which would replace any metadata already there.
+		ctx = metadata.AppendToOutgoingContext(ctx, MetadataKey, addr.String())
+	}
+	return invoker(ctx, method, req, reply, cc, opts...)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -78,6 +81,25 @@ func run() error {
 		return fmt.Errorf("create access token verifier: %w", err)
 	}
 
+	// Connects lazily, like the gRPC clients. Nothing waits for Valkey at startup: the
+	// rate limits let requests through while it's unreachable.
+	valkey := redis.NewClient(&redis.Options{
+		Addr:     cfg.ValkeyAddr,
+		Username: cfg.ValkeyUsername,
+		Password: cfg.ValkeyPassword,
+		// Each rate-limit check has a short deadline, which go-redis ignores without
+		// this, falling back to 5-second timeouts. Retries wouldn't fit in it either
+		// (0 means the default of 3).
+		ContextTimeoutEnabled: true,
+		MaxRetries:            -1,
+	})
+	defer closeConn(valkey, "valkey")
+	// Spans would otherwise record each command's arguments, and the keys hold client
+	// addresses and user IDs.
+	if err := redisotel.InstrumentTracing(valkey, redisotel.WithDBStatement(false)); err != nil {
+		return fmt.Errorf("trace valkey: %w", err)
+	}
+
 	handler := httpapi.NewHandler(
 		pricingv1.NewPricingServiceClient(pricingConn),
 		identityv1.NewIdentityServiceClient(identityConn),
@@ -131,7 +153,7 @@ func newConn(addr string) (*grpc.ClientConn, error) {
 	)
 }
 
-func closeConn(conn *grpc.ClientConn, name string) {
+func closeConn(conn io.Closer, name string) {
 	if err := conn.Close(); err != nil {
 		log.Printf("close %s connection: %v", name, err)
 	}

@@ -33,6 +33,16 @@ spec:
               value: "identity:50052"
             - name: IDENTITY_JWKS_URL
               value: "http://identity:8080/.well-known/jwks.json"
+            - name: VALKEY_ADDR
+              value: "valkey:6379"
+            - name: VALKEY_USERNAME
+              value: edge
+            # From the Secret the Tiltfile builds. The pod gets only the Edge's own key.
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-users
+                  key: edge
             # Standard OpenTelemetry variables, read by the Go SDK itself.
             - name: OTEL_SERVICE_NAME
               value: edge

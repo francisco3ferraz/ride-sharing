@@ -209,6 +209,8 @@ go_service('identity', objects=['jwt-signing-key:secret'], resource_deps=['ident
 go_service(
     'edge',
     objects=['edge:httproute'],
-    resource_deps=['gateway-api-crds'],  # the HTTPRoute needs the Gateway API types
+    # The HTTPRoute needs the Gateway API types, and the pod its Valkey password. Valkey
+    # itself can come up later: the rate limits let requests through until it does.
+    resource_deps=['gateway-api-crds', 'valkey-users'],
     links=['https://ride-sharing.localhost/v1/fare-estimate?distance_meters=5000&duration_seconds=600'],
 )

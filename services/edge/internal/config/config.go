@@ -10,6 +10,11 @@ type Config struct {
 	// Identity serves it on 8080, which the Edge itself listens on, so running both
 	// locally means port-forwarding Identity's to 8081.
 	IdentityJWKSURL string `env:"IDENTITY_JWKS_URL" envDefault:"http://localhost:8081/.well-known/jwks.json"`
+	ValkeyAddr      string `env:"VALKEY_ADDR" envDefault:"localhost:6379"`
+	// The Edge's own ACL user. Its password is the edge key of the valkey-users Secret,
+	// which the Tiltfile generates.
+	ValkeyUsername string `env:"VALKEY_USERNAME" envDefault:"edge"`
+	ValkeyPassword string `env:"VALKEY_PASSWORD"`
 }
 
 func Load() (Config, error) {

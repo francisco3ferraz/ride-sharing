@@ -21,6 +21,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	IdentityService_Register_FullMethodName = "/ridesharing.identity.v1.IdentityService/Register"
 	IdentityService_Login_FullMethodName    = "/ridesharing.identity.v1.IdentityService/Login"
+	IdentityService_Refresh_FullMethodName  = "/ridesharing.identity.v1.IdentityService/Refresh"
+	IdentityService_Logout_FullMethodName   = "/ridesharing.identity.v1.IdentityService/Logout"
 	IdentityService_GetUser_FullMethodName  = "/ridesharing.identity.v1.IdentityService/GetUser"
 )
 
@@ -35,6 +37,13 @@ type IdentityServiceClient interface {
 	// Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
 	// wrong password alike.
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*LoginResponse, error)
+	// Marks the refresh token used and returns new tokens for the same session. Fails
+	// with UNAUTHENTICATED for an unknown, expired, used or revoked token alike. A used
+	// one also revokes the session, since someone else holds a token from it.
+	Refresh(ctx context.Context, in *RefreshRequest, opts ...grpc.CallOption) (*RefreshResponse, error)
+	// Revokes the session the refresh token belongs to. An unknown token, or one whose
+	// session is already revoked, isn't an error.
+	Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error)
 	// Returns the user with the given ID. Fails with INVALID_ARGUMENT for an ID that isn't
 	// a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
 	// pass only an ID they've authenticated, such as a verified access token's subject.
@@ -69,6 +78,26 @@ func (c *identityServiceClient) Login(ctx context.Context, in *LoginRequest, opt
 	return out, nil
 }
 
+func (c *identityServiceClient) Refresh(ctx context.Context, in *RefreshRequest, opts ...grpc.CallOption) (*RefreshResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RefreshResponse)
+	err := c.cc.Invoke(ctx, IdentityService_Refresh_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) Logout(ctx context.Context, in *LogoutRequest, opts ...grpc.CallOption) (*LogoutResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LogoutResponse)
+	err := c.cc.Invoke(ctx, IdentityService_Logout_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *identityServiceClient) GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*GetUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetUserResponse)
@@ -90,6 +119,13 @@ type IdentityServiceServer interface {
 	// Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
 	// wrong password alike.
 	Login(context.Context, *LoginRequest) (*LoginResponse, error)
+	// Marks the refresh token used and returns new tokens for the same session. Fails
+	// with UNAUTHENTICATED for an unknown, expired, used or revoked token alike. A used
+	// one also revokes the session, since someone else holds a token from it.
+	Refresh(context.Context, *RefreshRequest) (*RefreshResponse, error)
+	// Revokes the session the refresh token belongs to. An unknown token, or one whose
+	// session is already revoked, isn't an error.
+	Logout(context.Context, *LogoutRequest) (*LogoutResponse, error)
 	// Returns the user with the given ID. Fails with INVALID_ARGUMENT for an ID that isn't
 	// a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
 	// pass only an ID they've authenticated, such as a verified access token's subject.
@@ -109,6 +145,12 @@ func (UnimplementedIdentityServiceServer) Register(context.Context, *RegisterReq
 }
 func (UnimplementedIdentityServiceServer) Login(context.Context, *LoginRequest) (*LoginResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Login not implemented")
+}
+func (UnimplementedIdentityServiceServer) Refresh(context.Context, *RefreshRequest) (*RefreshResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Refresh not implemented")
+}
+func (UnimplementedIdentityServiceServer) Logout(context.Context, *LogoutRequest) (*LogoutResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Logout not implemented")
 }
 func (UnimplementedIdentityServiceServer) GetUser(context.Context, *GetUserRequest) (*GetUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUser not implemented")
@@ -170,6 +212,42 @@ func _IdentityService_Login_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_Refresh_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefreshRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).Refresh(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_Refresh_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).Refresh(ctx, req.(*RefreshRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_Logout_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LogoutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).Logout(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_Logout_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).Logout(ctx, req.(*LogoutRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _IdentityService_GetUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetUserRequest)
 	if err := dec(in); err != nil {
@@ -202,6 +280,14 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Login",
 			Handler:    _IdentityService_Login_Handler,
+		},
+		{
+			MethodName: "Refresh",
+			Handler:    _IdentityService_Refresh_Handler,
+		},
+		{
+			MethodName: "Logout",
+			Handler:    _IdentityService_Logout_Handler,
 		},
 		{
 			MethodName: "GetUser",

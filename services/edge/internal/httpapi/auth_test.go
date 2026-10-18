@@ -33,6 +33,8 @@ type fakeIdentity struct {
 	err         error
 	gotRegister *identityv1.RegisterRequest
 	gotLogin    *identityv1.LoginRequest
+	gotRefresh  *identityv1.RefreshRequest
+	gotLogout   *identityv1.LogoutRequest
 	gotGetUser  *identityv1.GetUserRequest
 }
 
@@ -50,6 +52,22 @@ func (f *fakeIdentity) Login(_ context.Context, req *identityv1.LoginRequest, _ 
 		return nil, f.err
 	}
 	return &identityv1.LoginResponse{User: f.user, Tokens: f.tokens}, nil
+}
+
+func (f *fakeIdentity) Refresh(_ context.Context, req *identityv1.RefreshRequest, _ ...grpc.CallOption) (*identityv1.RefreshResponse, error) {
+	f.gotRefresh = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.RefreshResponse{Tokens: f.tokens}, nil
+}
+
+func (f *fakeIdentity) Logout(_ context.Context, req *identityv1.LogoutRequest, _ ...grpc.CallOption) (*identityv1.LogoutResponse, error) {
+	f.gotLogout = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.LogoutResponse{}, nil
 }
 
 func (f *fakeIdentity) GetUser(_ context.Context, req *identityv1.GetUserRequest, _ ...grpc.CallOption) (*identityv1.GetUserResponse, error) {

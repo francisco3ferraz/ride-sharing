@@ -11,6 +11,13 @@ service IdentityService {
   // Starts a session for the user. Fails with UNAUTHENTICATED for an unknown email or a
   // wrong password alike.
   rpc Login(LoginRequest) returns (LoginResponse);
+  // Marks the refresh token used and returns new tokens for the same session. Fails
+  // with UNAUTHENTICATED for an unknown, expired, used or revoked token alike. A used
+  // one also revokes the session, since someone else holds a token from it.
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+  // Revokes the session the refresh token belongs to. An unknown token, or one whose
+  // session is already revoked, isn't an error.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
   // Returns the user with the given ID. Fails with INVALID_ARGUMENT for an ID that isn't
   // a UUID, and NOT_FOUND when no user has it. It doesn't check who's asking, so callers
   // pass only an ID they've authenticated, such as a verified access token's subject.
@@ -69,6 +76,20 @@ message LoginResponse {
   User user = 1;
   Tokens tokens = 2;
 }
+
+message RefreshRequest {
+  string refresh_token = 1;
+}
+
+message RefreshResponse {
+  Tokens tokens = 1;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message LogoutResponse {}
 
 message GetUserRequest {
   string user_id = 1;

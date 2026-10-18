@@ -27,10 +27,11 @@ var testTokens = account.Tokens{
 
 // fakeAccounts fails with err when it's set. Otherwise it returns testTokens and a user
 // built from its arguments, so a test sees whether the role made it through both
-// translations.
+// translations. gotToken is the refresh token it was given.
 type fakeAccounts struct {
-	err    error
-	called bool
+	err      error
+	called   bool
+	gotToken string
 }
 
 func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, account.Tokens, error) {
@@ -47,6 +48,21 @@ func (f *fakeAccounts) Login(_ context.Context, email, _ string) (account.User, 
 		return account.User{}, account.Tokens{}, f.err
 	}
 	return account.User{ID: testID, Email: email, Role: account.RoleDriver}, testTokens, nil
+}
+
+func (f *fakeAccounts) Refresh(_ context.Context, token string) (account.Tokens, error) {
+	f.called = true
+	f.gotToken = token
+	if f.err != nil {
+		return account.Tokens{}, f.err
+	}
+	return testTokens, nil
+}
+
+func (f *fakeAccounts) Logout(_ context.Context, token string) error {
+	f.called = true
+	f.gotToken = token
+	return f.err
 }
 
 func (f *fakeAccounts) GetUser(_ context.Context, userID uuid.UUID) (account.User, error) {
@@ -128,6 +144,28 @@ func TestLogin(t *testing.T) {
 	assertTestTokens(t, resp.GetTokens())
 }
 
+func TestRefresh(t *testing.T) {
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
+
+	resp, err := srv.Refresh(context.Background(), &identityv1.RefreshRequest{RefreshToken: "old-refresh-token"})
+
+	require.NoError(t, err)
+	assert.Equal(t, "old-refresh-token", accounts.gotToken)
+	assertTestTokens(t, resp.GetTokens())
+}
+
+func TestLogout(t *testing.T) {
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
+
+	resp, err := srv.Logout(context.Background(), &identityv1.LogoutRequest{RefreshToken: "refresh-token"})
+
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Equal(t, "refresh-token", accounts.gotToken)
+}
+
 func TestGetUser(t *testing.T) {
 	srv := New(&fakeAccounts{})
 
@@ -177,6 +215,7 @@ func TestErrorCodes(t *testing.T) {
 		},
 		{name: "email taken", err: account.ErrEmailTaken, want: codes.AlreadyExists},
 		{name: "invalid credentials", err: account.ErrInvalidCredentials, want: codes.Unauthenticated},
+		{name: "invalid refresh token", err: account.ErrInvalidRefreshToken, want: codes.Unauthenticated},
 		{name: "no such user", err: account.ErrUserNotFound, want: codes.NotFound},
 		{
 			name: "caller cancelled",
@@ -204,9 +243,11 @@ func TestErrorCodes(t *testing.T) {
 				Email:    "ana@example.pt",
 				Password: "a long enough password",
 			})
+			_, refreshErr := srv.Refresh(context.Background(), &identityv1.RefreshRequest{RefreshToken: "refresh-token"})
+			_, logoutErr := srv.Logout(context.Background(), &identityv1.LogoutRequest{RefreshToken: "refresh-token"})
 			_, getUserErr := srv.GetUser(context.Background(), &identityv1.GetUserRequest{UserId: testID.String()})
 
-			for _, err := range []error{registerErr, loginErr, getUserErr} {
+			for _, err := range []error{registerErr, loginErr, refreshErr, logoutErr, getUserErr} {
 				assert.Equal(t, tt.want, status.Code(err))
 				assert.Equal(t, tt.err.Error(), status.Convert(err).Message())
 			}

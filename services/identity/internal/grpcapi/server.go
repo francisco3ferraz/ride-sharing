@@ -20,6 +20,8 @@ import (
 type AccountService interface {
 	Register(ctx context.Context, email, pw string, role account.Role) (account.User, account.Tokens, error)
 	Login(ctx context.Context, email, pw string) (account.User, account.Tokens, error)
+	Refresh(ctx context.Context, token string) (account.Tokens, error)
+	Logout(ctx context.Context, token string) error
 	GetUser(ctx context.Context, userID uuid.UUID) (account.User, error)
 }
 
@@ -59,6 +61,24 @@ func (s *Server) Login(ctx context.Context, req *identityv1.LoginRequest) (*iden
 	return &identityv1.LoginResponse{User: userToProto(user), Tokens: tokensToProto(tokens)}, nil
 }
 
+// An empty token isn't INVALID_ARGUMENT: the Edge sends one when the cookie is missing,
+// and needs UNAUTHENTICATED, which sends the web app to log in. It matches no stored
+// token, so it fails like any unknown one.
+func (s *Server) Refresh(ctx context.Context, req *identityv1.RefreshRequest) (*identityv1.RefreshResponse, error) {
+	tokens, err := s.accounts.Refresh(ctx, req.GetRefreshToken())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &identityv1.RefreshResponse{Tokens: tokensToProto(tokens)}, nil
+}
+
+func (s *Server) Logout(ctx context.Context, req *identityv1.LogoutRequest) (*identityv1.LogoutResponse, error) {
+	if err := s.accounts.Logout(ctx, req.GetRefreshToken()); err != nil {
+		return nil, toStatus(err)
+	}
+	return &identityv1.LogoutResponse{}, nil
+}
+
 func (s *Server) GetUser(ctx context.Context, req *identityv1.GetUserRequest) (*identityv1.GetUserResponse, error) {
 	// Not uuid's own error, which describes its parser ("invalid UUID length: 1"), and
 	// INVALID_ARGUMENT messages are shown to the caller.
@@ -83,7 +103,7 @@ func toStatus(err error) error {
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, account.ErrEmailTaken):
 		return status.Error(codes.AlreadyExists, err.Error())
-	case errors.Is(err, account.ErrInvalidCredentials):
+	case errors.Is(err, account.ErrInvalidCredentials), errors.Is(err, account.ErrInvalidRefreshToken):
 		return status.Error(codes.Unauthenticated, err.Error())
 	case errors.Is(err, account.ErrUserNotFound):
 		return status.Error(codes.NotFound, err.Error())

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	pricingv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/pricing/v1"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/ratelimit"
@@ -38,7 +40,8 @@ func (f *fakeLimiter) Allow(_ context.Context, name, key string, limit ratelimit
 }
 
 var testLimits = Limits{
-	IP: ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second},
+	IP:   ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second},
+	User: ratelimit.Limit{Rate: 10, Burst: 20, Period: time.Second},
 }
 
 const fareTarget = "/v1/fare-estimate?distance_meters=5000&duration_seconds=600"
@@ -94,6 +97,58 @@ func TestOverTheLimitIsTooManyRequests(t *testing.T) {
 			assert.Nil(t, pricing.got, "pricing should not be called")
 		})
 	}
+}
+
+func TestLimitsEachLoggedInUser(t *testing.T) {
+	tests := []struct {
+		name       string
+		token      string
+		verifier   *fakeVerifier
+		wantChecks []limitCheck
+	}{
+		{
+			name:     "logged in",
+			token:    testAccessToken,
+			verifier: &fakeVerifier{claims: testClaims()},
+			wantChecks: []limitCheck{
+				{name: "ip", key: "unknown", limit: testLimits.IP},
+				{name: "user", key: testUserID, limit: testLimits.User},
+			},
+		},
+		{
+			name:       "token that fails verification",
+			token:      testAccessToken,
+			verifier:   &fakeVerifier{err: errors.New("token is expired")},
+			wantChecks: []limitCheck{{name: "ip", key: "unknown", limit: testLimits.IP}},
+		},
+		{
+			name:       "anonymous",
+			verifier:   &fakeVerifier{},
+			wantChecks: []limitCheck{{name: "ip", key: "unknown", limit: testLimits.IP}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			limiter := &fakeLimiter{}
+			identity := &fakeIdentity{user: &identityv1.User{Id: testUserID, Email: "ana@example.pt", Role: identityv1.Role_ROLE_RIDER}}
+
+			send(t, NewHandler(nil, identity, tt.verifier, limiter, testLimits), http.MethodGet, "/v1/me", "", tt.token)
+
+			assert.Equal(t, tt.wantChecks, limiter.checks)
+		})
+	}
+}
+
+func TestOverTheUserLimitIsTooManyRequests(t *testing.T) {
+	limiter := &fakeLimiter{deny: map[string]time.Duration{"user": time.Second}}
+	identity := &fakeIdentity{}
+
+	rec := send(t, NewHandler(nil, identity, &fakeVerifier{claims: testClaims()}, limiter, testLimits), http.MethodGet, "/v1/me", "", testAccessToken)
+
+	assertProblem(t, rec, api.Problem{Type: "about:blank", Title: "Too Many Requests", Status: http.StatusTooManyRequests})
+	assert.Equal(t, "1", rec.Header().Get("Retry-After"))
+	assert.Nil(t, identity.gotGetUser, "identity should not be called")
 }
 
 func TestHealthzIsNotLimited(t *testing.T) {

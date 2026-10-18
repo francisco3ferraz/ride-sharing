@@ -25,21 +25,24 @@ type Config struct {
 
 	// Each rate limit reads <prefix>RATE, <prefix>BURST and <prefix>PERIOD, a Go
 	// duration such as 1s or 1h. Load sets their defaults.
-	IPLimit ratelimit.Limit `envPrefix:"RATE_LIMIT_IP_"`
+	IPLimit   ratelimit.Limit `envPrefix:"RATE_LIMIT_IP_"`
+	UserLimit ratelimit.Limit `envPrefix:"RATE_LIMIT_USER_"`
 }
 
 func Load() (Config, error) {
 	// envDefault on Limit's fields would give every limit the same values, so the
 	// defaults are set here. env.Parse keeps any field no variable is set for.
 	cfg := Config{
-		IPLimit: ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second},
+		IPLimit:   ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second},
+		UserLimit: ratelimit.Limit{Rate: 10, Burst: 20, Period: time.Second},
 	}
 	if err := env.Parse(&cfg); err != nil {
 		return Config{}, err
 	}
 
 	limits := map[string]ratelimit.Limit{
-		"RATE_LIMIT_IP_": cfg.IPLimit,
+		"RATE_LIMIT_IP_":   cfg.IPLimit,
+		"RATE_LIMIT_USER_": cfg.UserLimit,
 	}
 	for prefix, limit := range limits {
 		if err := limit.Validate(); err != nil {

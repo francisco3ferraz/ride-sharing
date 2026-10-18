@@ -18,6 +18,19 @@ func (h *Handler) limitIP(next http.Handler) http.Handler {
 	})
 }
 
+// limitUser limits a logged-in user's requests, from however many addresses. It must
+// go inside authenticate, which puts the claims in the context. Anonymous requests have
+// only the per-address limit.
+func (h *Handler) limitUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := claimsFrom(r.Context())
+		if ok && !h.allow(w, r, "user", claims.Subject, h.limits.User) {
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // allow checks one limit, and answers 429 when it's used up.
 func (h *Handler) allow(w http.ResponseWriter, r *http.Request, name, key string, limit ratelimit.Limit) bool {
 	ok, retryAfter := h.limiter.Allow(r.Context(), name, key, limit)

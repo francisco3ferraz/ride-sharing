@@ -11,7 +11,7 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/ratelimit"
 )
 
-var limitPrefixes = []string{"RATE_LIMIT_IP_"}
+var limitPrefixes = []string{"RATE_LIMIT_IP_", "RATE_LIMIT_USER_"}
 
 func TestLoadDefaults(t *testing.T) {
 	keys := []string{"LISTEN_ADDR", "PRICING_ADDR", "IDENTITY_ADDR", "IDENTITY_JWKS_URL", "VALKEY_ADDR", "VALKEY_USERNAME", "VALKEY_PASSWORD"}
@@ -35,6 +35,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "edge", cfg.ValkeyUsername)
 	assert.Empty(t, cfg.ValkeyPassword)
 	assert.Equal(t, ratelimit.Limit{Rate: 20, Burst: 40, Period: time.Second}, cfg.IPLimit)
+	assert.Equal(t, ratelimit.Limit{Rate: 10, Burst: 20, Period: time.Second}, cfg.UserLimit)
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -63,6 +64,7 @@ func TestLoadFromEnv(t *testing.T) {
 	assert.Equal(t, "secret", cfg.ValkeyPassword)
 	want := ratelimit.Limit{Rate: 7, Burst: 9, Period: time.Minute}
 	assert.Equal(t, want, cfg.IPLimit)
+	assert.Equal(t, want, cfg.UserLimit)
 }
 
 func TestLoadRejectsInvalidLimits(t *testing.T) {

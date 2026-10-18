@@ -9,6 +9,7 @@ if k8s_context() != 'kind-ride-sharing':
 GATEWAY_API_VERSION = 'v1.6.1'  # the version Traefik's chart documents
 TRAEFIK_CHART_VERSION = '41.7.1'
 CNPG_CHART_VERSION = '0.29.1'  # CloudNativePG operator 1.30.1
+MAILPIT_CHART_VERSION = '0.37.0'  # Mailpit 1.31.1
 
 
 # Platform: Gateway API, Traefik and the public Gateway.
@@ -46,6 +47,19 @@ k8s_resource(
     objects=['ride-sharing-tls:secret', 'public:gateway', 'https-redirect:httproute'],
     resource_deps=['traefik'],
     labels=['platform'],
+)
+
+# Mailpit catches the email Identity sends, from a community-maintained chart.
+helm_repo('jouve', 'https://jouve.github.io/charts', resource_name='jouve-repo', labels=['platform'])
+helm_resource(
+    'mailpit',
+    'jouve/mailpit',
+    namespace='mailpit',
+    flags=['--version', MAILPIT_CHART_VERSION, '--create-namespace', '--values', 'infra/k8s/platform/mailpit/values.yaml'],
+    deps=['infra/k8s/platform/mailpit/values.yaml'],
+    resource_deps=['jouve-repo', 'gateway-api-crds'],  # the chart's HTTPRoute
+    labels=['platform'],
+    links=['https://mailpit.ride-sharing.localhost'],
 )
 
 

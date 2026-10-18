@@ -28,4 +28,4 @@ spec:
             matchExpressions:
               - key: kubernetes.io/metadata.name
                 operator: In
-                values: [ride-sharing, observability]
+                values: [ride-sharing, observability, mailpit]

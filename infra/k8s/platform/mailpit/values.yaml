@@ -1,0 +1,15 @@
+# Mailpit catches every email Identity sends. The chart's defaults fit otherwise: plain
+# SMTP with no login on the mailpit-smtp Service's port 25, and messages in an emptyDir,
+# so they're gone when the pod restarts.
+
+# The web UI and its API, on the public Gateway like Grafana. The chart writes the
+# HTTPRoute itself.
+route:
+  http:
+    enabled: true
+    parentRefs:
+      - name: public
+        namespace: traefik
+        sectionName: https
+    hostnames:
+      - mailpit.ride-sharing.localhost

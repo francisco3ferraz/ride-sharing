@@ -210,7 +210,8 @@ paths:
       summary: Sets a new password with the token from a reset link, and ends every session.
       description: >-
         An unknown, used or expired token gets a 400, as does a password that breaks the
-        rule. Access tokens already issued keep working until they expire.
+        rule. Access tokens already issued keep working until they expire. Logins locked
+        out for the email, from any address, are let in again.
       security: []
       requestBody:
         required: true

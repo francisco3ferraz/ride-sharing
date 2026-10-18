@@ -303,8 +303,9 @@ func (s *Service) sendPasswordReset(ctx context.Context, userID uuid.UUID, email
 	}
 }
 
-// ResetPassword sets a new password with a reset link's token, and revokes every session
-// of the user. Access tokens already issued keep working until they expire.
+// ResetPassword sets a new password with a reset link's token, revokes every session of
+// the user, and lifts every login lockout for their email, since whoever was locked out
+// may have been the owner. Access tokens already issued keep working until they expire.
 func (s *Service) ResetPassword(ctx context.Context, token, pw string) error {
 	hash := refreshtoken.Hash(token)
 
@@ -337,6 +338,9 @@ func (s *Service) ResetPassword(ctx context.Context, token, pw string) error {
 		}
 		if err := q.RevokeUserSessions(ctx, userID); err != nil {
 			return fmt.Errorf("revoke sessions: %w", err)
+		}
+		if err := q.ClearUserLoginAttempts(ctx, userID); err != nil {
+			return fmt.Errorf("clear login attempts: %w", err)
 		}
 		return nil
 	})

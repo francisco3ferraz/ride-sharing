@@ -57,8 +57,8 @@ type IdentityServiceClient interface {
 	// Emails the user a link to reset their password, if the email is registered. It
 	// succeeds either way, so the caller can't tell which emails are.
 	RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error)
-	// Sets a new password with the token from a reset link, and revokes every session of
-	// the user. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
+	// Sets a new password with the token from a reset link, revokes every session of the
+	// user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
 	// and for a password that breaks the rule.
 	ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error)
 }
@@ -170,8 +170,8 @@ type IdentityServiceServer interface {
 	// Emails the user a link to reset their password, if the email is registered. It
 	// succeeds either way, so the caller can't tell which emails are.
 	RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error)
-	// Sets a new password with the token from a reset link, and revokes every session of
-	// the user. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
+	// Sets a new password with the token from a reset link, revokes every session of the
+	// user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
 	// and for a password that breaks the rule.
 	ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error)
 	mustEmbedUnimplementedIdentityServiceServer()

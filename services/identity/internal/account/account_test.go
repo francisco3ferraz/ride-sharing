@@ -452,6 +452,24 @@ func TestService(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("a reset lifts the email's lockouts from every address, and no one else's", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "elsa@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		failLogins(t, svc, "elsa@example.pt", testIP, 5)
+		failLogins(t, svc, "Elsa@Example.pt", otherIP, 5)
+		failLogins(t, svc, "fred@example.pt", testIP, 5)
+
+		require.NoError(t, svc.RequestPasswordReset(ctx, "elsa@example.pt"))
+		require.NoError(t, svc.ResetPassword(ctx, nextEmail(t, mailer).token, "a brand new long password"))
+
+		_, _, err = svc.Login(ctx, "elsa@example.pt", "a brand new long password", testIP)
+		assert.NoError(t, err)
+		_, _, err = svc.Login(ctx, "elsa@example.pt", "a brand new long password", otherIP)
+		assert.NoError(t, err)
+		_, _, err = svc.Login(ctx, "fred@example.pt", testPassword, testIP)
+		assert.ErrorIs(t, err, ErrTooManyLoginAttempts)
+	})
+
 	t.Run("a reset for an unknown email sends nothing, and doesn't fail", func(t *testing.T) {
 		require.NoError(t, svc.RequestPasswordReset(ctx, "nobody@example.pt"))
 		// No goroutine started, so there's nothing to wait for.

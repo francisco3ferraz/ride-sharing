@@ -3,6 +3,8 @@ package account
 import (
 	"crypto/ed25519"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -157,6 +159,101 @@ func TestService(t *testing.T) {
 		_, err = db.New(pool).CreateRefreshToken(ctx, db.CreateRefreshTokenParams{TokenHash: hash[:], SessionID: sessionID})
 		assert.ErrorIs(t, err, pgx.ErrNoRows)
 	})
+
+	t.Run("refresh replaces the token within its session", func(t *testing.T) {
+		user, first, err := svc.Register(ctx, "ines@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		second, err := svc.Refresh(ctx, first.Refresh.Value)
+		require.NoError(t, err)
+		assertTokens(t, pool, pub, user, second)
+		assert.NotEqual(t, first.Refresh.Value, second.Refresh.Value)
+
+		firstSession, firstUsed := refreshTokenRow(t, pool, first.Refresh.Value)
+		secondSession, secondUsed := refreshTokenRow(t, pool, second.Refresh.Value)
+		assert.True(t, firstUsed)
+		assert.False(t, secondUsed)
+		assert.Equal(t, firstSession, secondSession)
+
+		third, err := svc.Refresh(ctx, second.Refresh.Value)
+		require.NoError(t, err)
+		assertTokens(t, pool, pub, user, third)
+		assert.Equal(t, 1, countSessions(t, pool, user.ID))
+	})
+
+	t.Run("refresh signs the user's current role", func(t *testing.T) {
+		user, tokens, err := svc.Register(ctx, "joao@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, "UPDATE users SET role = 'driver' WHERE id = $1", user.ID)
+		require.NoError(t, err)
+
+		refreshed, err := svc.Refresh(ctx, tokens.Refresh.Value)
+		require.NoError(t, err)
+		user.Role = RoleDriver
+		assertTokens(t, pool, pub, user, refreshed)
+	})
+
+	t.Run("reusing a token revokes its session, so the newest token fails too", func(t *testing.T) {
+		_, first, err := svc.Register(ctx, "laura@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		second, err := svc.Refresh(ctx, first.Refresh.Value)
+		require.NoError(t, err)
+
+		_, err = svc.Refresh(ctx, first.Refresh.Value)
+		assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+
+		// Fails only if the revocation committed, rather than rolling back with the error.
+		_, err = svc.Refresh(ctx, second.Refresh.Value)
+		assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+		sessionID, _ := refreshTokenRow(t, pool, first.Refresh.Value)
+		assert.True(t, sessionRevoked(t, pool, sessionID))
+	})
+
+	t.Run("of two concurrent refreshes with one token, one wins and the other ends the session", func(t *testing.T) {
+		_, _, err := svc.Register(ctx, "miguel@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		// A missing lock lets both through only some of the time.
+		for range 20 {
+			_, tokens, err := svc.Login(ctx, "miguel@example.pt", testPassword)
+			require.NoError(t, err)
+
+			var results [2]Tokens
+			var errs [2]error
+			var wg sync.WaitGroup
+			for i := range 2 {
+				wg.Go(func() { results[i], errs[i] = svc.Refresh(ctx, tokens.Refresh.Value) })
+			}
+			wg.Wait()
+
+			winner := slices.IndexFunc(errs[:], func(err error) bool { return err == nil })
+			require.NotEqual(t, -1, winner, "neither refresh succeeded: %v", errs)
+			require.ErrorIs(t, errs[1-winner], ErrInvalidRefreshToken)
+			_, err = svc.Refresh(ctx, results[winner].Refresh.Value)
+			require.ErrorIs(t, err, ErrInvalidRefreshToken)
+		}
+	})
+
+	t.Run("refresh rejects unknown, empty and expired tokens, leaving the session alone", func(t *testing.T) {
+		_, tokens, err := svc.Register(ctx, "nuno@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		sessionID, _ := refreshTokenRow(t, pool, tokens.Refresh.Value)
+		expired, expiredHash := refreshtoken.Generate()
+		_, err = pool.Exec(ctx, `
+			INSERT INTO refresh_tokens (token_hash, session_id, expires_at)
+			VALUES ($1, $2, now() - interval '1 second')`, expiredHash[:], sessionID)
+		require.NoError(t, err)
+
+		for _, token := range []string{"not a token", "", expired} {
+			_, err := svc.Refresh(ctx, token)
+			assert.ErrorIs(t, err, ErrInvalidRefreshToken)
+		}
+
+		_, used := refreshTokenRow(t, pool, expired)
+		assert.False(t, used)
+		_, err = svc.Refresh(ctx, tokens.Refresh.Value)
+		assert.NoError(t, err)
+	})
 }
 
 // assertTokens checks that the access token verifies as the Edge will verify it, and that
@@ -178,16 +275,35 @@ func assertTokens(t *testing.T, pool *pgxpool.Pool, pub ed25519.PublicKey, user 
 
 	hash := refreshtoken.Hash(tokens.Refresh.Value)
 	var userID uuid.UUID
-	var sessionStart, expiresAt time.Time
+	var createdAt, expiresAt time.Time
 	err = pool.QueryRow(t.Context(), `
-		SELECT s.user_id, s.created_at, t.expires_at
+		SELECT s.user_id, t.created_at, t.expires_at
 		FROM refresh_tokens t JOIN sessions s ON s.id = t.session_id
-		WHERE t.token_hash = $1`, hash[:]).Scan(&userID, &sessionStart, &expiresAt)
+		WHERE t.token_hash = $1`, hash[:]).Scan(&userID, &createdAt, &expiresAt)
 	require.NoError(t, err, "no refresh token stored under the token's hash")
 	assert.Equal(t, user.ID, userID)
 	assert.WithinDuration(t, expiresAt, tokens.Refresh.ExpiresAt, 0)
-	// Created in the session's transaction, so with the same now() as the session.
-	assert.WithinDuration(t, sessionStart.Add(7*24*time.Hour), expiresAt, 0)
+	// Both from the same now(), the transaction's start.
+	assert.WithinDuration(t, createdAt.Add(7*24*time.Hour), expiresAt, 0)
+}
+
+// refreshTokenRow returns the session a stored refresh token belongs to, and whether
+// it was used.
+func refreshTokenRow(t *testing.T, pool *pgxpool.Pool, token string) (sessionID uuid.UUID, used bool) {
+	t.Helper()
+	hash := refreshtoken.Hash(token)
+	err := pool.QueryRow(t.Context(), "SELECT session_id, used_at IS NOT NULL FROM refresh_tokens WHERE token_hash = $1",
+		hash[:]).Scan(&sessionID, &used)
+	require.NoError(t, err, "no refresh token stored under the token's hash")
+	return sessionID, used
+}
+
+func sessionRevoked(t *testing.T, pool *pgxpool.Pool, sessionID uuid.UUID) bool {
+	t.Helper()
+	var revoked bool
+	err := pool.QueryRow(t.Context(), "SELECT revoked_at IS NOT NULL FROM sessions WHERE id = $1", sessionID).Scan(&revoked)
+	require.NoError(t, err)
+	return revoked
 }
 
 func countSessions(t *testing.T, pool *pgxpool.Pool, userID uuid.UUID) int {

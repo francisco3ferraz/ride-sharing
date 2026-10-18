@@ -29,14 +29,16 @@ const (
 
 // fakeIdentity stands in for the Identity service, like fakePricing.
 type fakeIdentity struct {
-	user        *identityv1.User
-	tokens      *identityv1.Tokens
-	err         error
-	gotRegister *identityv1.RegisterRequest
-	gotLogin    *identityv1.LoginRequest
-	gotRefresh  *identityv1.RefreshRequest
-	gotLogout   *identityv1.LogoutRequest
-	gotGetUser  *identityv1.GetUserRequest
+	user                    *identityv1.User
+	tokens                  *identityv1.Tokens
+	err                     error
+	gotRegister             *identityv1.RegisterRequest
+	gotLogin                *identityv1.LoginRequest
+	gotRefresh              *identityv1.RefreshRequest
+	gotLogout               *identityv1.LogoutRequest
+	gotGetUser              *identityv1.GetUserRequest
+	gotRequestPasswordReset *identityv1.RequestPasswordResetRequest
+	gotResetPassword        *identityv1.ResetPasswordRequest
 }
 
 func (f *fakeIdentity) Register(_ context.Context, req *identityv1.RegisterRequest, _ ...grpc.CallOption) (*identityv1.RegisterResponse, error) {
@@ -77,6 +79,22 @@ func (f *fakeIdentity) GetUser(_ context.Context, req *identityv1.GetUserRequest
 		return nil, f.err
 	}
 	return &identityv1.GetUserResponse{User: f.user}, nil
+}
+
+func (f *fakeIdentity) RequestPasswordReset(_ context.Context, req *identityv1.RequestPasswordResetRequest, _ ...grpc.CallOption) (*identityv1.RequestPasswordResetResponse, error) {
+	f.gotRequestPasswordReset = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.RequestPasswordResetResponse{}, nil
+}
+
+func (f *fakeIdentity) ResetPassword(_ context.Context, req *identityv1.ResetPasswordRequest, _ ...grpc.CallOption) (*identityv1.ResetPasswordResponse, error) {
+	f.gotResetPassword = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.ResetPasswordResponse{}, nil
 }
 
 func testTokens() *identityv1.Tokens {
@@ -249,6 +267,53 @@ func TestLogout(t *testing.T) {
 	}
 }
 
+func TestRequestPasswordReset(t *testing.T) {
+	identity := &fakeIdentity{}
+	rec := post(t, identity, "/v1/auth/password-reset", `{"email": "ana@example.pt"}`)
+
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+	assert.Empty(t, rec.Body.String())
+	require.NotNil(t, identity.gotRequestPasswordReset)
+	assert.Equal(t, "ana@example.pt", identity.gotRequestPasswordReset.GetEmail())
+}
+
+func TestResetPassword(t *testing.T) {
+	identity := &fakeIdentity{}
+	rec := post(t, identity, "/v1/auth/password-reset/confirm",
+		`{"token": "reset-token", "password": "a brand new long password"}`)
+
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Empty(t, rec.Body.String())
+	assert.Empty(t, rec.Header().Values("Set-Cookie"))
+	require.NotNil(t, identity.gotResetPassword)
+	assert.Equal(t, "reset-token", identity.gotResetPassword.GetToken())
+	assert.Equal(t, "a brand new long password", identity.gotResetPassword.GetPassword())
+}
+
+func TestPasswordResetRejectsBadRequests(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+		body   string
+	}{
+		{name: "reset request without email", target: "/v1/auth/password-reset", body: `{}`},
+		{name: "reset without token", target: "/v1/auth/password-reset/confirm", body: `{"password": "a brand new long password"}`},
+		{name: "reset without password", target: "/v1/auth/password-reset/confirm", body: `{"token": "reset-token"}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &fakeIdentity{}
+			rec := post(t, identity, tt.target, tt.body)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
+			assert.Nil(t, identity.gotRequestPasswordReset, "identity should not be called")
+			assert.Nil(t, identity.gotResetPassword, "identity should not be called")
+		})
+	}
+}
+
 func TestAuthMapsIdentityErrors(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -310,6 +375,25 @@ func TestAuthMapsIdentityErrors(t *testing.T) {
 				Status: http.StatusUnauthorized,
 				Detail: new("refresh token is invalid or expired"),
 			},
+		},
+		{
+			name:   "invalid reset link",
+			target: "/v1/auth/password-reset/confirm",
+			body:   `{"token": "used-token", "password": "a brand new long password"}`,
+			err:    status.Error(codes.InvalidArgument, "password reset link is invalid or expired"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Bad Request",
+				Status: http.StatusBadRequest,
+				Detail: new("password reset link is invalid or expired"),
+			},
+		},
+		{
+			name:   "reset request fails",
+			target: "/v1/auth/password-reset",
+			body:   `{"email": "ana@example.pt"}`,
+			err:    status.Error(codes.Internal, "create password reset token: connection refused"),
+			want:   api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},
 		},
 		// The cookies stay, so the user can retry.
 		{

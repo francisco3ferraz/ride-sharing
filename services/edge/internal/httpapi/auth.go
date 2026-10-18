@@ -12,10 +12,10 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 )
 
-// Register and login hash a password, and Identity limits how many hashes run at once,
-// so in a burst of logins requests wait their turn. Refresh hashes nothing but gets the
-// same room: one that times out after Identity commits leaves the browser holding a
-// used token, so its next refresh ends the session.
+// Register, login and password reset hash a password, and Identity limits how many
+// hashes run at once, so in a burst of logins requests wait their turn. Refresh hashes
+// nothing but gets the same room: one that times out after Identity commits leaves the
+// browser holding a used token, so its next refresh ends the session.
 const identityTimeout = 2 * time.Second
 
 func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestObject) (api.RegisterUserResponseObject, error) {
@@ -93,6 +93,33 @@ func (h *Handler) Logout(ctx context.Context, req api.LogoutRequestObject) (api.
 		return nil, err
 	}
 	return logoutResponse{cookies: expiredSessionCookies()}, nil
+}
+
+func (h *Handler) RequestPasswordReset(ctx context.Context, req api.RequestPasswordResetRequestObject) (api.RequestPasswordResetResponseObject, error) {
+	ctx, cancel := context.WithTimeout(ctx, identityTimeout)
+	defer cancel()
+
+	_, err := h.identity.RequestPasswordReset(ctx, &identityv1.RequestPasswordResetRequest{Email: req.Body.Email})
+	if err != nil {
+		return nil, err
+	}
+	return api.RequestPasswordReset202Response{}, nil
+}
+
+// The user's sessions end, but this browser's cookies stay: its access token works until
+// it expires, like every other access token already issued, and its next refresh fails.
+func (h *Handler) ResetPassword(ctx context.Context, req api.ResetPasswordRequestObject) (api.ResetPasswordResponseObject, error) {
+	ctx, cancel := context.WithTimeout(ctx, identityTimeout)
+	defer cancel()
+
+	_, err := h.identity.ResetPassword(ctx, &identityv1.ResetPasswordRequest{
+		Token:    req.Body.Token,
+		Password: req.Body.Password,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return api.ResetPassword204Response{}, nil
 }
 
 // Handlers never get the ResponseWriter, so the response sets the cookies. The

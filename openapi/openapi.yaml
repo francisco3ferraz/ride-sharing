@@ -161,6 +161,57 @@ paths:
           $ref: "#/components/responses/Problem"
         "500":
           $ref: "#/components/responses/Problem"
+  /v1/auth/password-reset:
+    post:
+      operationId: requestPasswordReset
+      summary: Emails a link to reset the password, if the email is registered.
+      description: >-
+        Every request gets the same 202, so the response doesn't reveal which emails are
+        registered. The link, valid for an hour, opens the web app's /reset-password page
+        with the token in the URL's fragment. Asking again makes older links stop working.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestPasswordResetRequest"
+      responses:
+        "202":
+          description: If the email is registered, a link is on its way.
+        "400":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
+  /v1/auth/password-reset/confirm:
+    post:
+      operationId: resetPassword
+      summary: Sets a new password with the token from a reset link, and ends every session.
+      description: >-
+        An unknown, used or expired token gets a 400, as does a password that breaks the
+        rule. Access tokens already issued keep working until they expire.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "204":
+          description: The password is changed, and the user's sessions have ended.
+        "400":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "500":
+          $ref: "#/components/responses/Problem"
   /v1/me:
     get:
       operationId: getMe
@@ -271,6 +322,24 @@ components:
           description: 15 to 128 characters, with no other rules.
         role:
           $ref: "#/components/schemas/Role"
+    RequestPasswordResetRequest:
+      type: object
+      required: [email]
+      properties:
+        # No format: email, as in LoginRequest. A malformed email gets the same 202 and no
+        # link.
+        email:
+          type: string
+    ResetPasswordRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token:
+          type: string
+          description: The token from the reset link's fragment.
+        password:
+          type: string
+          description: The new password. 15 to 128 characters, with no other rules.
     Role:
       type: string
       enum: [rider, driver]

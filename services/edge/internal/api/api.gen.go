@@ -77,6 +77,20 @@ type RegisterRequest struct {
 	Role     Role   `json:"role"`
 }
 
+// RequestPasswordResetRequest defines model for RequestPasswordResetRequest.
+type RequestPasswordResetRequest struct {
+	Email string `json:"email"`
+}
+
+// ResetPasswordRequest defines model for ResetPasswordRequest.
+type ResetPasswordRequest struct {
+	// Password The new password. 15 to 128 characters, with no other rules.
+	Password string `json:"password"`
+
+	// Token The token from the reset link's fragment.
+	Token string `json:"token"`
+}
+
 // Role defines model for Role.
 type Role string
 
@@ -114,6 +128,12 @@ type GetFareEstimateParams struct {
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
+// RequestPasswordResetJSONRequestBody defines body for RequestPasswordReset for application/json ContentType.
+type RequestPasswordResetJSONRequestBody = RequestPasswordResetRequest
+
+// ResetPasswordJSONRequestBody defines body for ResetPassword for application/json ContentType.
+type ResetPasswordJSONRequestBody = ResetPasswordRequest
+
 // RegisterUserJSONRequestBody defines body for RegisterUser for application/json ContentType.
 type RegisterUserJSONRequestBody = RegisterRequest
 
@@ -125,6 +145,12 @@ type ServerInterface interface {
 	// Logout Ends the session, and clears both session cookies.
 	// (POST /v1/auth/logout)
 	Logout(w http.ResponseWriter, r *http.Request, params LogoutParams)
+	// RequestPasswordReset Emails a link to reset the password, if the email is registered.
+	// (POST /v1/auth/password-reset)
+	RequestPasswordReset(w http.ResponseWriter, r *http.Request)
+	// ResetPassword Sets a new password with the token from a reset link, and ends every session.
+	// (POST /v1/auth/password-reset/confirm)
+	ResetPassword(w http.ResponseWriter, r *http.Request)
 	// Refresh Replaces both session cookies with new ones.
 	// (POST /v1/auth/refresh)
 	Refresh(w http.ResponseWriter, r *http.Request, params RefreshParams)
@@ -188,6 +214,34 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Logout(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestPasswordReset operation middleware
+func (siw *ServerInterfaceWrapper) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestPasswordReset(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResetPassword operation middleware
+func (siw *ServerInterfaceWrapper) ResetPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResetPassword(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -431,6 +485,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/login", wrapper.Login)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/refresh", wrapper.Refresh)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/logout", wrapper.Logout)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/password-reset", wrapper.RequestPasswordReset)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/password-reset/confirm", wrapper.ResetPassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
 
 	return m
@@ -585,6 +641,154 @@ func (response Logout403ApplicationProblemPlusJSONResponse) VisitLogoutResponse(
 type Logout500ApplicationProblemPlusJSONResponse Problem
 
 func (response Logout500ApplicationProblemPlusJSONResponse) VisitLogoutResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestPasswordResetRequestObject struct {
+	Body *RequestPasswordResetJSONRequestBody
+}
+
+type RequestPasswordResetResponseObject interface {
+	VisitRequestPasswordResetResponse(w http.ResponseWriter) error
+}
+
+type RequestPasswordReset202Response struct {
+}
+
+func (response RequestPasswordReset202Response) VisitRequestPasswordResetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(202)
+	return nil
+}
+
+type RequestPasswordReset400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RequestPasswordReset400ApplicationProblemPlusJSONResponse) VisitRequestPasswordResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestPasswordReset403ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestPasswordReset403ApplicationProblemPlusJSONResponse) VisitRequestPasswordResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestPasswordReset413ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestPasswordReset413ApplicationProblemPlusJSONResponse) VisitRequestPasswordResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestPasswordReset500ApplicationProblemPlusJSONResponse Problem
+
+func (response RequestPasswordReset500ApplicationProblemPlusJSONResponse) VisitRequestPasswordResetResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResetPasswordRequestObject struct {
+	Body *ResetPasswordJSONRequestBody
+}
+
+type ResetPasswordResponseObject interface {
+	VisitResetPasswordResponse(w http.ResponseWriter) error
+}
+
+type ResetPassword204Response struct {
+}
+
+func (response ResetPassword204Response) VisitResetPasswordResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ResetPassword400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ResetPassword400ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResetPassword403ApplicationProblemPlusJSONResponse Problem
+
+func (response ResetPassword403ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResetPassword413ApplicationProblemPlusJSONResponse Problem
+
+func (response ResetPassword413ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ResetPassword500ApplicationProblemPlusJSONResponse Problem
+
+func (response ResetPassword500ApplicationProblemPlusJSONResponse) VisitResetPasswordResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -879,6 +1083,12 @@ type StrictServerInterface interface {
 	// Logout Ends the session, and clears both session cookies.
 	// (POST /v1/auth/logout)
 	Logout(ctx context.Context, request LogoutRequestObject) (LogoutResponseObject, error)
+	// RequestPasswordReset Emails a link to reset the password, if the email is registered.
+	// (POST /v1/auth/password-reset)
+	RequestPasswordReset(ctx context.Context, request RequestPasswordResetRequestObject) (RequestPasswordResetResponseObject, error)
+	// ResetPassword Sets a new password with the token from a reset link, and ends every session.
+	// (POST /v1/auth/password-reset/confirm)
+	ResetPassword(ctx context.Context, request ResetPasswordRequestObject) (ResetPasswordResponseObject, error)
 	// Refresh Replaces both session cookies with new ones.
 	// (POST /v1/auth/refresh)
 	Refresh(ctx context.Context, request RefreshRequestObject) (RefreshResponseObject, error)
@@ -982,6 +1192,68 @@ func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request, params L
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(LogoutResponseObject); ok {
 		if err := validResponse.VisitLogoutResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RequestPasswordReset operation middleware
+func (sh *strictHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var request RequestPasswordResetRequestObject
+
+	var body RequestPasswordResetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RequestPasswordReset(ctx, request.(RequestPasswordResetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RequestPasswordReset")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RequestPasswordResetResponseObject); ok {
+		if err := validResponse.VisitRequestPasswordResetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ResetPassword operation middleware
+func (sh *strictHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var request ResetPasswordRequestObject
+
+	var body ResetPasswordJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ResetPassword(ctx, request.(ResetPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResetPassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ResetPasswordResponseObject); ok {
+		if err := validResponse.VisitResetPasswordResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1101,37 +1373,43 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"6M9mhnvnzd1/BgA=",
+	"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",
+	"/NCvzQzXztuH/wwA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

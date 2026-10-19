@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +35,38 @@ var (
 	testIP  = netip.MustParseAddr("203.0.113.7")
 	otherIP = netip.MustParseAddr("2001:db8::1")
 )
+
+func TestCleanName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr string
+	}{
+		{name: "kept as typed", input: "Ana Sofia", want: "Ana Sofia"},
+		{name: "trimmed", input: " \tAna\u00a0", want: "Ana"},
+		{name: "empty", input: "", wantErr: "invalid name: must not be empty"},
+		{name: "only spaces", input: "   ", wantErr: "invalid name: must not be empty"},
+		{name: "50 characters", input: strings.Repeat("a", 50), want: strings.Repeat("a", 50)},
+		{name: "51 characters", input: strings.Repeat("a", 51), wantErr: "invalid name: must be at most 50 characters"},
+		{name: "counts characters, not bytes", input: strings.Repeat("ã", 50), want: strings.Repeat("ã", 50)},
+		{name: "NUL", input: "Ana\x00", wantErr: "invalid name: must not contain control characters"},
+		{name: "line break", input: "Ana\nSofia", wantErr: "invalid name: must not contain control characters"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := cleanName(tt.input)
+			if tt.wantErr != "" {
+				require.ErrorIs(t, err, ErrInvalidName)
+				assert.Equal(t, tt.wantErr, err.Error())
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
 
 func TestService(t *testing.T) {
 	ctx := t.Context()
@@ -262,6 +295,60 @@ func TestService(t *testing.T) {
 
 	t.Run("get an unknown user", func(t *testing.T) {
 		_, err := svc.GetUser(ctx, uuid.New())
+		assert.ErrorIs(t, err, ErrUserNotFound)
+	})
+
+	t.Run("set a name, then replace it", func(t *testing.T) {
+		registered, _, err := svc.Register(ctx, "lara@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		assert.Empty(t, registered.Name)
+
+		updated, err := svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("  Lara  ")})
+		require.NoError(t, err)
+		assert.Equal(t, User{ID: registered.ID, Name: "Lara", Email: "lara@example.pt", Role: RoleRider}, updated)
+
+		updated, err = svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Lara Sousa")})
+		require.NoError(t, err)
+		assert.Equal(t, "Lara Sousa", updated.Name)
+
+		got, err := svc.GetUser(ctx, registered.ID)
+		require.NoError(t, err)
+		assert.Equal(t, updated, got)
+		loggedIn, _, err := svc.Login(ctx, "lara@example.pt", testPassword, testIP)
+		require.NoError(t, err)
+		assert.Equal(t, updated, loggedIn)
+	})
+
+	t.Run("an update with nothing to change returns the user as they are", func(t *testing.T) {
+		registered, _, err := svc.Register(ctx, "marta@example.pt", testPassword, RoleDriver)
+		require.NoError(t, err)
+		named, err := svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Marta")})
+		require.NoError(t, err)
+
+		got, err := svc.UpdateUser(ctx, registered.ID, UserUpdate{})
+		require.NoError(t, err)
+		assert.Equal(t, named, got)
+	})
+
+	t.Run("a name that breaks the rule leaves the old one", func(t *testing.T) {
+		registered, _, err := svc.Register(ctx, "wanda@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		_, err = svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Wanda")})
+		require.NoError(t, err)
+
+		_, err = svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Wan\x00da")})
+		require.ErrorIs(t, err, ErrInvalidName)
+
+		got, err := svc.GetUser(ctx, registered.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Wanda", got.Name)
+	})
+
+	t.Run("update an unknown user", func(t *testing.T) {
+		_, err := svc.UpdateUser(ctx, uuid.New(), UserUpdate{Name: new("Ana")})
+		require.ErrorIs(t, err, ErrUserNotFound)
+
+		_, err = svc.UpdateUser(ctx, uuid.New(), UserUpdate{})
 		assert.ErrorIs(t, err, ErrUserNotFound)
 	})
 

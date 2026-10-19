@@ -13,8 +13,13 @@ INSERT INTO users (
 RETURNING id;
 
 -- name: GetUserByID :one
-SELECT id, email, role FROM users
+SELECT id, name, email, role FROM users
 WHERE id = $1;
+
+-- name: UpdateUserName :one
+UPDATE users SET name = $2
+WHERE id = $1
+RETURNING id, name, email, role;
 
 -- name: UpdateUserPassword :exec
 UPDATE users SET password_hash = $2

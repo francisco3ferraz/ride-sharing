@@ -1,5 +1,5 @@
-// Package account registers users, starts, refreshes and ends their sessions, and resets
-// their passwords. It knows nothing about gRPC.
+// Package account registers and updates users, starts, refreshes and ends their sessions,
+// and resets their passwords. It knows nothing about gRPC.
 package account
 
 import (
@@ -8,11 +8,15 @@ import (
 	"fmt"
 	"log"
 	"net/netip"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/accesstoken"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/db"
@@ -29,9 +33,16 @@ const (
 )
 
 type User struct {
-	ID    uuid.UUID
+	ID uuid.UUID
+	// Name is "" until the user sets one.
+	Name  string
 	Email string
 	Role  Role
+}
+
+// UserUpdate holds the changes to make to a user. A nil field stays as it is.
+type UserUpdate struct {
+	Name *string
 }
 
 type Token struct {
@@ -56,7 +67,13 @@ var (
 	ErrInvalidResetToken = errors.New("password reset link is invalid or expired")
 	// Shown to the user, for registered and unknown emails alike.
 	ErrTooManyLoginAttempts = errors.New("too many failed logins: try again later")
+	// ErrInvalidName is wrapped by the errors for a name that breaks the rule. The full
+	// message is written for the user.
+	ErrInvalidName = errors.New("invalid name")
 )
+
+// A name is shown to the other person on a trip, as the user typed it.
+const maxNameRunes = 50
 
 // After this many failed logins for one email from one address within 15 minutes, that
 // pair is blocked for 15 minutes. The windows are in queries/login_attempts.sql.
@@ -190,7 +207,7 @@ func (s *Service) checkPassword(ctx context.Context, email, pw string) (User, er
 	if err != nil {
 		return User{}, fmt.Errorf("verify password: %w", err)
 	}
-	return User{ID: row.ID, Email: row.Email, Role: Role(row.Role)}, nil
+	return User{ID: row.ID, Name: row.Name.String, Email: row.Email, Role: Role(row.Role)}, nil
 }
 
 // loginFailed blocks the pair if this was its last allowed failure, and returns
@@ -358,7 +375,48 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {
 		return User{}, fmt.Errorf("get user: %w", err)
 	}
 
-	return User{ID: row.ID, Email: row.Email, Role: Role(row.Role)}, nil
+	// A NULL name's String is "".
+	return User{ID: row.ID, Name: row.Name.String, Email: row.Email, Role: Role(row.Role)}, nil
+}
+
+// UpdateUser makes the update's changes and returns the user as they then are. With
+// nothing to change, it returns the user as they are.
+func (s *Service) UpdateUser(ctx context.Context, userID uuid.UUID, update UserUpdate) (User, error) {
+	if update.Name == nil {
+		return s.GetUser(ctx, userID)
+	}
+	name, err := cleanName(*update.Name)
+	if err != nil {
+		// Unwrapped: its message is shown to the user.
+		return User{}, err
+	}
+
+	row, err := s.queries.UpdateUserName(ctx, db.UpdateUserNameParams{ID: userID, Name: pgtype.Text{String: name, Valid: true}})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("update user name: %w", err)
+	}
+	return User{ID: row.ID, Name: row.Name.String, Email: row.Email, Role: Role(row.Role)}, nil
+}
+
+// cleanName trims the name, and checks what's left against the rule.
+func cleanName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	switch n := utf8.RuneCountInString(name); {
+	case n == 0:
+		return "", fmt.Errorf("%w: must not be empty", ErrInvalidName)
+	case n > maxNameRunes:
+		return "", fmt.Errorf("%w: must be at most %d characters", ErrInvalidName, maxNameRunes)
+	}
+	// JSON allows NUL as \u0000, and Postgres rejects it in text, which would make the
+	// update a 500. Line breaks and other control characters don't belong in a name
+	// either.
+	if strings.ContainsFunc(name, unicode.IsControl) {
+		return "", fmt.Errorf("%w: must not contain control characters", ErrInvalidName)
+	}
+	return name, nil
 }
 
 // inTx runs fn in a transaction. fn must make every query through q: s.queries runs on

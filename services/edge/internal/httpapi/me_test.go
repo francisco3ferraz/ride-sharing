@@ -110,3 +110,127 @@ func TestGetMeWithoutClaims(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, identity.gotGetUser)
 }
+
+func TestUpdateMe(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantName *string
+	}{
+		{name: "name set", body: `{"name": "Ana Sofia"}`, wantName: new("Ana Sofia")},
+		{name: "nothing to change", body: `{}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &fakeIdentity{
+				user: &identityv1.User{Id: testUserID, Email: "ana@example.pt", Role: identityv1.Role_ROLE_RIDER, Name: "Ana Sofia"},
+			}
+			verifier := &fakeVerifier{claims: testClaims()}
+
+			rec := send(t, NewHandler(nil, identity, verifier, &fakeLimiter{}, Limits{}), http.MethodPatch, "/v1/me", tt.body, testAccessToken)
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.JSONEq(t, `{"id": "`+testUserID+`", "email": "ana@example.pt", "role": "rider", "name": "Ana Sofia"}`, rec.Body.String())
+			require.NotNil(t, identity.gotUpdateUser)
+			assert.Equal(t, testUserID, identity.gotUpdateUser.GetUserId())
+			assert.Equal(t, tt.wantName, identity.gotUpdateUser.Name)
+		})
+	}
+}
+
+func TestUpdateMeRejectsBadBodies(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		// A null and a missing name both decode to nil, so only the validator can tell
+		// them apart.
+		{name: "null name", body: `{"name": null}`},
+		{name: "misspelt field", body: `{"nmae": "Ana"}`},
+		{name: "name isn't a string", body: `{"name": 5}`},
+		{name: "no body"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &fakeIdentity{}
+			verifier := &fakeVerifier{claims: testClaims()}
+
+			rec := send(t, NewHandler(nil, identity, verifier, &fakeLimiter{}, Limits{}), http.MethodPatch, "/v1/me", tt.body, testAccessToken)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
+			assert.Nil(t, identity.gotUpdateUser, "identity should not be called")
+		})
+	}
+}
+
+// The body is invalid too: security is checked first, so an anonymous caller learns
+// nothing about what a valid body looks like.
+func TestUpdateMeRequiresAccessToken(t *testing.T) {
+	identity := &fakeIdentity{}
+	verifier := &fakeVerifier{claims: testClaims()}
+
+	rec := send(t, NewHandler(nil, identity, verifier, &fakeLimiter{}, Limits{}), http.MethodPatch, "/v1/me", `{"name": null}`, "")
+
+	assertProblem(t, rec, api.Problem{
+		Type:   "about:blank",
+		Title:  "Unauthorized",
+		Status: http.StatusUnauthorized,
+		Detail: new("security requirements failed: a valid access token is required"),
+	})
+	assert.Nil(t, identity.gotUpdateUser, "identity should not be called")
+}
+
+func TestUpdateMeMapsIdentityErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		identity *fakeIdentity
+		want     api.Problem
+	}{
+		{
+			name:     "name breaks the rule",
+			identity: &fakeIdentity{err: status.Error(codes.InvalidArgument, "invalid name: must not be empty")},
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Bad Request",
+				Status: http.StatusBadRequest,
+				Detail: new("invalid name: must not be empty"),
+			},
+		},
+		{
+			name:     "user no longer exists",
+			identity: &fakeIdentity{err: status.Error(codes.NotFound, "user not found")},
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Unauthorized",
+				Status: http.StatusUnauthorized,
+				Detail: new("the access token's user no longer exists"),
+			},
+		},
+		{
+			name:     "internal failure",
+			identity: &fakeIdentity{err: status.Error(codes.Internal, "update user name: connection refused")},
+			want:     api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			verifier := &fakeVerifier{claims: testClaims()}
+			rec := send(t, NewHandler(nil, tt.identity, verifier, &fakeLimiter{}, Limits{}), http.MethodPatch, "/v1/me", `{"name": " "}`, testAccessToken)
+
+			assertProblem(t, rec, tt.want)
+		})
+	}
+}
+
+func TestUpdateMeWithoutClaims(t *testing.T) {
+	identity := &fakeIdentity{}
+
+	_, err := NewHandler(nil, identity, nil, &fakeLimiter{}, Limits{}).UpdateMe(context.Background(), api.UpdateMeRequestObject{Body: &api.UpdateMeJSONRequestBody{}})
+
+	require.Error(t, err)
+	assert.Nil(t, identity.gotUpdateUser)
+}

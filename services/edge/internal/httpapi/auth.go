@@ -190,7 +190,12 @@ func userFromProto(user *identityv1.User) (api.User, error) {
 	if err != nil {
 		return api.User{}, err
 	}
-	return api.User{Id: id, Email: user.GetEmail(), Role: role}, nil
+	apiUser := api.User{Id: id, Email: user.GetEmail(), Role: role}
+	// Identity sends "" for a name the user hasn't set, and the API leaves it out.
+	if name := user.GetName(); name != "" {
+		apiUser.Name = &name
+	}
+	return apiUser, nil
 }
 
 func roleFromProto(role identityv1.Role) (api.Role, error) {

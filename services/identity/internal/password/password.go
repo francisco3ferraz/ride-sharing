@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
@@ -31,6 +32,11 @@ const (
 	keyBytes  = 32
 	// Identity's memory limit and GOMEMLIMIT assume at most this many hashes at once.
 	maxConcurrent = 4
+	// Past this many waiting for a slot, a hash is turned away at once. A full queue
+	// waits four hashes' time, about 200 ms in a burst on a laptop, which must stay well
+	// inside the Edge's timeout for Identity calls: a queue holding that timeout's worth
+	// spends every slot on a login about to time out.
+	maxQueued = 16
 )
 
 var b64 = base64.RawStdEncoding
@@ -48,10 +54,15 @@ var (
 	// full message is written for the user.
 	ErrInvalid  = errors.New("invalid password")
 	ErrMismatch = errors.New("password does not match")
+	// ErrBusy means too many hashes were running or waiting to take another, so nothing
+	// was hashed.
+	ErrBusy = errors.New("too many passwords are being hashed")
 )
 
 type Hasher struct {
 	slots *semaphore.Weighted
+	// Hashes running or waiting for a slot.
+	admitted atomic.Int64
 }
 
 func New() *Hasher {
@@ -71,8 +82,9 @@ func (h *Hasher) Hash(ctx context.Context, password string) (string, error) {
 	return h.hash(ctx, password, salt)
 }
 
-// Verify returns ErrMismatch if password doesn't match encoded. Any other error means
-// encoded wasn't made by Hash, or ctx ended while waiting for a slot.
+// Verify returns ErrMismatch if password doesn't match encoded, and ErrBusy if it was
+// turned away. Any other error means encoded wasn't made by Hash, or ctx ended while
+// waiting for a slot.
 func (h *Hasher) Verify(ctx context.Context, password, encoded string) error {
 	rest, ok := strings.CutPrefix(encoded, prefix)
 	if !ok {
@@ -95,7 +107,8 @@ func (h *Hasher) Verify(ctx context.Context, password, encoded string) error {
 }
 
 // VerifyDummy does Verify's work when a login's email doesn't exist, so it takes as
-// long as a wrong password. It returns an error only if ctx ends while waiting.
+// long as a wrong password, and is turned away the same way. It returns an error only
+// if it's turned away or ctx ends while waiting.
 func (h *Hasher) VerifyDummy(ctx context.Context, password string) error {
 	err := h.Verify(ctx, password, dummyHash)
 	if errors.Is(err, ErrMismatch) {
@@ -105,6 +118,14 @@ func (h *Hasher) VerifyDummy(ctx context.Context, password string) error {
 }
 
 func (h *Hasher) hash(ctx context.Context, password string, salt []byte) (string, error) {
+	// Counted before waiting, so running and waiting hashes share one limit, and
+	// uncounted however this returns.
+	if h.admitted.Add(1) > maxConcurrent+maxQueued {
+		h.admitted.Add(-1)
+		return "", ErrBusy
+	}
+	defer h.admitted.Add(-1)
+
 	if err := h.slots.Acquire(ctx, 1); err != nil {
 		return "", fmt.Errorf("wait for hashing slot: %w", err)
 	}

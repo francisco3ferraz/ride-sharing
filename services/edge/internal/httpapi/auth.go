@@ -12,10 +12,12 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/edge/internal/api"
 )
 
-// Register, login and password reset hash a password, and Identity limits how many
-// hashes run at once, so in a burst of logins requests wait their turn. Refresh hashes
-// nothing but gets the same room: one that times out after Identity commits leaves the
-// browser holding a used token, so its next refresh ends the session.
+// Register, login and password reset hash a password. Identity limits how many hashes
+// run at once and how many wait, and turns the rest away, so in a burst of logins
+// requests wait their turn only briefly. Its queue must stay well inside this, or every
+// slot hashes for a request about to time out. Refresh hashes nothing but gets the same
+// room: one that times out after Identity commits leaves the browser holding a used
+// token, so its next refresh ends the session.
 const identityTimeout = 2 * time.Second
 
 func (h *Handler) RegisterUser(ctx context.Context, req api.RegisterUserRequestObject) (api.RegisterUserResponseObject, error) {

@@ -3,6 +3,7 @@ package password
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -95,4 +96,36 @@ func TestHashingWaitsForASlot(t *testing.T) {
 	_, err := h.Hash(ctx, "a long enough password")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.ErrorIs(t, h.Verify(ctx, "a long enough password", dummyHash), context.DeadlineExceeded)
+}
+
+func TestHashingTurnsAwayPastAFullQueue(t *testing.T) {
+	h := New()
+	// With every slot held, each hash admitted waits.
+	require.NoError(t, h.slots.Acquire(t.Context(), maxConcurrent))
+	defer h.slots.Release(maxConcurrent)
+
+	waiting, stopWaiting := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	for range maxConcurrent + maxQueued {
+		wg.Go(func() {
+			_, err := h.Hash(waiting, "a long enough password")
+			assert.ErrorIs(t, err, context.Canceled)
+		})
+	}
+	// Otherwise a call below could be admitted ahead of one of them.
+	require.Eventually(t, func() bool {
+		return h.admitted.Load() == maxConcurrent+maxQueued
+	}, time.Second, time.Millisecond)
+
+	// One that waited for a slot would fail with DeadlineExceeded instead.
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	_, err := h.Hash(ctx, "a long enough password")
+	assert.ErrorIs(t, err, ErrBusy)
+	assert.ErrorIs(t, h.Verify(ctx, "a long enough password", dummyHash), ErrBusy)
+	assert.ErrorIs(t, h.VerifyDummy(ctx, "a long enough password"), ErrBusy)
+
+	stopWaiting()
+	wg.Wait()
+	assert.Zero(t, h.admitted.Load(), "every hash that returned is uncounted")
 }

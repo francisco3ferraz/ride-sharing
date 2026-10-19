@@ -37,6 +37,7 @@ type fakeIdentity struct {
 	gotRefresh              *identityv1.RefreshRequest
 	gotLogout               *identityv1.LogoutRequest
 	gotGetUser              *identityv1.GetUserRequest
+	gotUpdateUser           *identityv1.UpdateUserRequest
 	gotRequestPasswordReset *identityv1.RequestPasswordResetRequest
 	gotResetPassword        *identityv1.ResetPasswordRequest
 }
@@ -79,6 +80,14 @@ func (f *fakeIdentity) GetUser(_ context.Context, req *identityv1.GetUserRequest
 		return nil, f.err
 	}
 	return &identityv1.GetUserResponse{User: f.user}, nil
+}
+
+func (f *fakeIdentity) UpdateUser(_ context.Context, req *identityv1.UpdateUserRequest, _ ...grpc.CallOption) (*identityv1.UpdateUserResponse, error) {
+	f.gotUpdateUser = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.UpdateUserResponse{User: f.user}, nil
 }
 
 func (f *fakeIdentity) RequestPasswordReset(_ context.Context, req *identityv1.RequestPasswordResetRequest, _ ...grpc.CallOption) (*identityv1.RequestPasswordResetResponse, error) {

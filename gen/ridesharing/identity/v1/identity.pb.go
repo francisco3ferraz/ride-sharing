@@ -72,10 +72,12 @@ func (Role) EnumDescriptor() ([]byte, []int) {
 }
 
 type User struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Role          Role                   `protobuf:"varint,3,opt,name=role,proto3,enum=ridesharing.identity.v1.Role" json:"role,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Email string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Role  Role                   `protobuf:"varint,3,opt,name=role,proto3,enum=ridesharing.identity.v1.Role" json:"role,omitempty"`
+	// Empty until the user sets one.
+	Name          string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -129,6 +131,13 @@ func (x *User) GetRole() Role {
 		return x.Role
 	}
 	return Role_ROLE_UNSPECIFIED
+}
+
+func (x *User) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
 }
 
 // A JWT signed with EdDSA. Whoever holds it can read its claims, so it carries nothing
@@ -764,6 +773,103 @@ func (x *GetUserResponse) GetUser() *User {
 	return nil
 }
 
+type UpdateUserRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// optional, so that leaving it out can't be mistaken for an empty name.
+	Name          *string `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateUserRequest) Reset() {
+	*x = UpdateUserRequest{}
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateUserRequest) ProtoMessage() {}
+
+func (x *UpdateUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateUserRequest.ProtoReflect.Descriptor instead.
+func (*UpdateUserRequest) Descriptor() ([]byte, []int) {
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *UpdateUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *UpdateUserRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+type UpdateUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateUserResponse) Reset() {
+	*x = UpdateUserResponse{}
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateUserResponse) ProtoMessage() {}
+
+func (x *UpdateUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateUserResponse.ProtoReflect.Descriptor instead.
+func (*UpdateUserResponse) Descriptor() ([]byte, []int) {
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *UpdateUserResponse) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
 type RequestPasswordResetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
@@ -773,7 +879,7 @@ type RequestPasswordResetRequest struct {
 
 func (x *RequestPasswordResetRequest) Reset() {
 	*x = RequestPasswordResetRequest{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[14]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -785,7 +891,7 @@ func (x *RequestPasswordResetRequest) String() string {
 func (*RequestPasswordResetRequest) ProtoMessage() {}
 
 func (x *RequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[14]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -798,7 +904,7 @@ func (x *RequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPasswordResetRequest.ProtoReflect.Descriptor instead.
 func (*RequestPasswordResetRequest) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{14}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RequestPasswordResetRequest) GetEmail() string {
@@ -816,7 +922,7 @@ type RequestPasswordResetResponse struct {
 
 func (x *RequestPasswordResetResponse) Reset() {
 	*x = RequestPasswordResetResponse{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[15]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -828,7 +934,7 @@ func (x *RequestPasswordResetResponse) String() string {
 func (*RequestPasswordResetResponse) ProtoMessage() {}
 
 func (x *RequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[15]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -841,7 +947,7 @@ func (x *RequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestPasswordResetResponse.ProtoReflect.Descriptor instead.
 func (*RequestPasswordResetResponse) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{15}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{17}
 }
 
 // The token is a secret: never log it.
@@ -855,7 +961,7 @@ type ResetPasswordRequest struct {
 
 func (x *ResetPasswordRequest) Reset() {
 	*x = ResetPasswordRequest{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[16]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -867,7 +973,7 @@ func (x *ResetPasswordRequest) String() string {
 func (*ResetPasswordRequest) ProtoMessage() {}
 
 func (x *ResetPasswordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[16]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -880,7 +986,7 @@ func (x *ResetPasswordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetPasswordRequest.ProtoReflect.Descriptor instead.
 func (*ResetPasswordRequest) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{16}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ResetPasswordRequest) GetToken() string {
@@ -905,7 +1011,7 @@ type ResetPasswordResponse struct {
 
 func (x *ResetPasswordResponse) Reset() {
 	*x = ResetPasswordResponse{}
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[17]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -917,7 +1023,7 @@ func (x *ResetPasswordResponse) String() string {
 func (*ResetPasswordResponse) ProtoMessage() {}
 
 func (x *ResetPasswordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[17]
+	mi := &file_ridesharing_identity_v1_identity_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -930,18 +1036,19 @@ func (x *ResetPasswordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetPasswordResponse.ProtoReflect.Descriptor instead.
 func (*ResetPasswordResponse) Descriptor() ([]byte, []int) {
-	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{17}
+	return file_ridesharing_identity_v1_identity_proto_rawDescGZIP(), []int{19}
 }
 
 var File_ridesharing_identity_v1_identity_proto protoreflect.FileDescriptor
 
 const file_ridesharing_identity_v1_identity_proto_rawDesc = "" +
 	"\n" +
-	"&ridesharing/identity/v1/identity.proto\x12\x17ridesharing.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"_\n" +
+	"&ridesharing/identity/v1/identity.proto\x12\x17ridesharing.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"s\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x121\n" +
-	"\x04role\x18\x03 \x01(\x0e2\x1d.ridesharing.identity.v1.RoleR\x04role\"^\n" +
+	"\x04role\x18\x03 \x01(\x0e2\x1d.ridesharing.identity.v1.RoleR\x04role\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"^\n" +
 	"\vAccessToken\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +
 	"\n" +
@@ -976,6 +1083,12 @@ const file_ridesharing_identity_v1_identity_proto_rawDesc = "" +
 	"\x0eGetUserRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"D\n" +
 	"\x0fGetUserResponse\x121\n" +
+	"\x04user\x18\x01 \x01(\v2\x1d.ridesharing.identity.v1.UserR\x04user\"N\n" +
+	"\x11UpdateUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01B\a\n" +
+	"\x05_name\"G\n" +
+	"\x12UpdateUserResponse\x121\n" +
 	"\x04user\x18\x01 \x01(\v2\x1d.ridesharing.identity.v1.UserR\x04user\"3\n" +
 	"\x1bRequestPasswordResetRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\"\x1e\n" +
@@ -988,13 +1101,15 @@ const file_ridesharing_identity_v1_identity_proto_rawDesc = "" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vROLE_DRIVER\x10\x01\x12\x0e\n" +
 	"\n" +
-	"ROLE_RIDER\x10\x022\xd7\x05\n" +
+	"ROLE_RIDER\x10\x022\xbe\x06\n" +
 	"\x0fIdentityService\x12_\n" +
 	"\bRegister\x12(.ridesharing.identity.v1.RegisterRequest\x1a).ridesharing.identity.v1.RegisterResponse\x12V\n" +
 	"\x05Login\x12%.ridesharing.identity.v1.LoginRequest\x1a&.ridesharing.identity.v1.LoginResponse\x12\\\n" +
 	"\aRefresh\x12'.ridesharing.identity.v1.RefreshRequest\x1a(.ridesharing.identity.v1.RefreshResponse\x12Y\n" +
 	"\x06Logout\x12&.ridesharing.identity.v1.LogoutRequest\x1a'.ridesharing.identity.v1.LogoutResponse\x12\\\n" +
-	"\aGetUser\x12'.ridesharing.identity.v1.GetUserRequest\x1a(.ridesharing.identity.v1.GetUserResponse\x12\x83\x01\n" +
+	"\aGetUser\x12'.ridesharing.identity.v1.GetUserRequest\x1a(.ridesharing.identity.v1.GetUserResponse\x12e\n" +
+	"\n" +
+	"UpdateUser\x12*.ridesharing.identity.v1.UpdateUserRequest\x1a+.ridesharing.identity.v1.UpdateUserResponse\x12\x83\x01\n" +
 	"\x14RequestPasswordReset\x124.ridesharing.identity.v1.RequestPasswordResetRequest\x1a5.ridesharing.identity.v1.RequestPasswordResetResponse\x12n\n" +
 	"\rResetPassword\x12-.ridesharing.identity.v1.ResetPasswordRequest\x1a..ridesharing.identity.v1.ResetPasswordResponseB\xfb\x01\n" +
 	"\x1bcom.ridesharing.identity.v1B\rIdentityProtoP\x01ZOgithub.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1;identityv1\xa2\x02\x03RIX\xaa\x02\x17Ridesharing.Identity.V1\xca\x02\x17Ridesharing\\Identity\\V1\xe2\x02#Ridesharing\\Identity\\V1\\GPBMetadata\xea\x02\x19Ridesharing::Identity::V1b\x06proto3"
@@ -1012,7 +1127,7 @@ func file_ridesharing_identity_v1_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_ridesharing_identity_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_ridesharing_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_ridesharing_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_ridesharing_identity_v1_identity_proto_goTypes = []any{
 	(Role)(0),                            // 0: ridesharing.identity.v1.Role
 	(*User)(nil),                         // 1: ridesharing.identity.v1.User
@@ -1029,16 +1144,18 @@ var file_ridesharing_identity_v1_identity_proto_goTypes = []any{
 	(*LogoutResponse)(nil),               // 12: ridesharing.identity.v1.LogoutResponse
 	(*GetUserRequest)(nil),               // 13: ridesharing.identity.v1.GetUserRequest
 	(*GetUserResponse)(nil),              // 14: ridesharing.identity.v1.GetUserResponse
-	(*RequestPasswordResetRequest)(nil),  // 15: ridesharing.identity.v1.RequestPasswordResetRequest
-	(*RequestPasswordResetResponse)(nil), // 16: ridesharing.identity.v1.RequestPasswordResetResponse
-	(*ResetPasswordRequest)(nil),         // 17: ridesharing.identity.v1.ResetPasswordRequest
-	(*ResetPasswordResponse)(nil),        // 18: ridesharing.identity.v1.ResetPasswordResponse
-	(*timestamppb.Timestamp)(nil),        // 19: google.protobuf.Timestamp
+	(*UpdateUserRequest)(nil),            // 15: ridesharing.identity.v1.UpdateUserRequest
+	(*UpdateUserResponse)(nil),           // 16: ridesharing.identity.v1.UpdateUserResponse
+	(*RequestPasswordResetRequest)(nil),  // 17: ridesharing.identity.v1.RequestPasswordResetRequest
+	(*RequestPasswordResetResponse)(nil), // 18: ridesharing.identity.v1.RequestPasswordResetResponse
+	(*ResetPasswordRequest)(nil),         // 19: ridesharing.identity.v1.ResetPasswordRequest
+	(*ResetPasswordResponse)(nil),        // 20: ridesharing.identity.v1.ResetPasswordResponse
+	(*timestamppb.Timestamp)(nil),        // 21: google.protobuf.Timestamp
 }
 var file_ridesharing_identity_v1_identity_proto_depIdxs = []int32{
 	0,  // 0: ridesharing.identity.v1.User.role:type_name -> ridesharing.identity.v1.Role
-	19, // 1: ridesharing.identity.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
-	19, // 2: ridesharing.identity.v1.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 1: ridesharing.identity.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 2: ridesharing.identity.v1.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 3: ridesharing.identity.v1.Tokens.access_token:type_name -> ridesharing.identity.v1.AccessToken
 	3,  // 4: ridesharing.identity.v1.Tokens.refresh_token:type_name -> ridesharing.identity.v1.RefreshToken
 	0,  // 5: ridesharing.identity.v1.RegisterRequest.role:type_name -> ridesharing.identity.v1.Role
@@ -1048,25 +1165,28 @@ var file_ridesharing_identity_v1_identity_proto_depIdxs = []int32{
 	4,  // 9: ridesharing.identity.v1.LoginResponse.tokens:type_name -> ridesharing.identity.v1.Tokens
 	4,  // 10: ridesharing.identity.v1.RefreshResponse.tokens:type_name -> ridesharing.identity.v1.Tokens
 	1,  // 11: ridesharing.identity.v1.GetUserResponse.user:type_name -> ridesharing.identity.v1.User
-	5,  // 12: ridesharing.identity.v1.IdentityService.Register:input_type -> ridesharing.identity.v1.RegisterRequest
-	7,  // 13: ridesharing.identity.v1.IdentityService.Login:input_type -> ridesharing.identity.v1.LoginRequest
-	9,  // 14: ridesharing.identity.v1.IdentityService.Refresh:input_type -> ridesharing.identity.v1.RefreshRequest
-	11, // 15: ridesharing.identity.v1.IdentityService.Logout:input_type -> ridesharing.identity.v1.LogoutRequest
-	13, // 16: ridesharing.identity.v1.IdentityService.GetUser:input_type -> ridesharing.identity.v1.GetUserRequest
-	15, // 17: ridesharing.identity.v1.IdentityService.RequestPasswordReset:input_type -> ridesharing.identity.v1.RequestPasswordResetRequest
-	17, // 18: ridesharing.identity.v1.IdentityService.ResetPassword:input_type -> ridesharing.identity.v1.ResetPasswordRequest
-	6,  // 19: ridesharing.identity.v1.IdentityService.Register:output_type -> ridesharing.identity.v1.RegisterResponse
-	8,  // 20: ridesharing.identity.v1.IdentityService.Login:output_type -> ridesharing.identity.v1.LoginResponse
-	10, // 21: ridesharing.identity.v1.IdentityService.Refresh:output_type -> ridesharing.identity.v1.RefreshResponse
-	12, // 22: ridesharing.identity.v1.IdentityService.Logout:output_type -> ridesharing.identity.v1.LogoutResponse
-	14, // 23: ridesharing.identity.v1.IdentityService.GetUser:output_type -> ridesharing.identity.v1.GetUserResponse
-	16, // 24: ridesharing.identity.v1.IdentityService.RequestPasswordReset:output_type -> ridesharing.identity.v1.RequestPasswordResetResponse
-	18, // 25: ridesharing.identity.v1.IdentityService.ResetPassword:output_type -> ridesharing.identity.v1.ResetPasswordResponse
-	19, // [19:26] is the sub-list for method output_type
-	12, // [12:19] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	1,  // 12: ridesharing.identity.v1.UpdateUserResponse.user:type_name -> ridesharing.identity.v1.User
+	5,  // 13: ridesharing.identity.v1.IdentityService.Register:input_type -> ridesharing.identity.v1.RegisterRequest
+	7,  // 14: ridesharing.identity.v1.IdentityService.Login:input_type -> ridesharing.identity.v1.LoginRequest
+	9,  // 15: ridesharing.identity.v1.IdentityService.Refresh:input_type -> ridesharing.identity.v1.RefreshRequest
+	11, // 16: ridesharing.identity.v1.IdentityService.Logout:input_type -> ridesharing.identity.v1.LogoutRequest
+	13, // 17: ridesharing.identity.v1.IdentityService.GetUser:input_type -> ridesharing.identity.v1.GetUserRequest
+	15, // 18: ridesharing.identity.v1.IdentityService.UpdateUser:input_type -> ridesharing.identity.v1.UpdateUserRequest
+	17, // 19: ridesharing.identity.v1.IdentityService.RequestPasswordReset:input_type -> ridesharing.identity.v1.RequestPasswordResetRequest
+	19, // 20: ridesharing.identity.v1.IdentityService.ResetPassword:input_type -> ridesharing.identity.v1.ResetPasswordRequest
+	6,  // 21: ridesharing.identity.v1.IdentityService.Register:output_type -> ridesharing.identity.v1.RegisterResponse
+	8,  // 22: ridesharing.identity.v1.IdentityService.Login:output_type -> ridesharing.identity.v1.LoginResponse
+	10, // 23: ridesharing.identity.v1.IdentityService.Refresh:output_type -> ridesharing.identity.v1.RefreshResponse
+	12, // 24: ridesharing.identity.v1.IdentityService.Logout:output_type -> ridesharing.identity.v1.LogoutResponse
+	14, // 25: ridesharing.identity.v1.IdentityService.GetUser:output_type -> ridesharing.identity.v1.GetUserResponse
+	16, // 26: ridesharing.identity.v1.IdentityService.UpdateUser:output_type -> ridesharing.identity.v1.UpdateUserResponse
+	18, // 27: ridesharing.identity.v1.IdentityService.RequestPasswordReset:output_type -> ridesharing.identity.v1.RequestPasswordResetResponse
+	20, // 28: ridesharing.identity.v1.IdentityService.ResetPassword:output_type -> ridesharing.identity.v1.ResetPasswordResponse
+	21, // [21:29] is the sub-list for method output_type
+	13, // [13:21] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_ridesharing_identity_v1_identity_proto_init() }
@@ -1074,13 +1194,14 @@ func file_ridesharing_identity_v1_identity_proto_init() {
 	if File_ridesharing_identity_v1_identity_proto != nil {
 		return
 	}
+	file_ridesharing_identity_v1_identity_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ridesharing_identity_v1_identity_proto_rawDesc), len(file_ridesharing_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

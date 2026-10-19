@@ -21,15 +21,17 @@ func requestError(w http.ResponseWriter, _ *http.Request, err error) {
 }
 
 // Services own the rules, so their messages for these codes are written for the client
-// and safe to show. Every other code, and any error that isn't from a service, is a 500.
-// gRPC itself also uses RESOURCE_EXHAUSTED, for a message over its 4 MB limit, which the
-// Edge's 64 KB bodies can't reach.
+// and safe to show. Every other code but UNAVAILABLE, and any error that isn't from a
+// service, is a 500. gRPC itself also uses RESOURCE_EXHAUSTED, for a message over its
+// 4 MB limit, which the Edge's 64 KB bodies can't reach.
 var clientErrorStatuses = map[codes.Code]int{
 	codes.InvalidArgument:   http.StatusBadRequest,
 	codes.Unauthenticated:   http.StatusUnauthorized,
 	codes.AlreadyExists:     http.StatusConflict,
 	codes.ResourceExhausted: http.StatusTooManyRequests,
 }
+
+const unavailableDetail = "the service is busy or unavailable: try again in a moment"
 
 // Handlers must return service errors unwrapped: for a wrapped error, gRPC's message
 // is the whole wrapped text.
@@ -41,6 +43,14 @@ func responseError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	if httpStatus, ok := clientErrorStatuses[status.Code(err)]; ok {
 		writeProblem(w, httpStatus, status.Convert(err).Message())
+		return
+	}
+	// A service that's too busy answers UNAVAILABLE, but so does gRPC itself when it
+	// can't reach one, with transport details in the message, so the detail is fixed.
+	// Not logged: a busy service turns calls away by the hundred, and the RPC's metrics
+	// and span already record each one.
+	if status.Code(err) == codes.Unavailable {
+		writeProblem(w, http.StatusServiceUnavailable, unavailableDetail)
 		return
 	}
 	log.Printf("%s %s: %v", r.Method, r.URL.Path, err)

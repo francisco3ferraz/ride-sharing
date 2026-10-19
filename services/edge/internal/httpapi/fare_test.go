@@ -69,8 +69,18 @@ func TestFareEstimateMapsPricingErrors(t *testing.T) {
 			},
 		},
 		{
-			name: "internal failure is hidden from the client",
+			name: "pricing unavailable is a 503",
 			err:  status.Error(codes.Unavailable, "connection refused"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Service Unavailable",
+				Status: http.StatusServiceUnavailable,
+				Detail: new("the service is busy or unavailable: try again in a moment"),
+			},
+		},
+		{
+			name: "internal failure is hidden from the client",
+			err:  status.Error(codes.Internal, "get quote: connection refused"),
 			want: api.Problem{Type: "about:blank", Title: "Internal Server Error", Status: http.StatusInternalServerError},
 		},
 	}

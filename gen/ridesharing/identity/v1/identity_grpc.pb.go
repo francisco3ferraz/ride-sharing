@@ -31,6 +31,10 @@ const (
 // IdentityServiceClient is the client API for IdentityService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Register, Login and ResetPassword hash a password, and fail with UNAVAILABLE when too
+// many are already being hashed. Nothing was done then, so they can be called again
+// shortly.
 type IdentityServiceClient interface {
 	// Creates a user and starts their session. Fails with INVALID_ARGUMENT for an empty
 	// email, a password that breaks the rule or an unspecified role, and ALREADY_EXISTS
@@ -58,8 +62,9 @@ type IdentityServiceClient interface {
 	// succeeds either way, so the caller can't tell which emails are.
 	RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error)
 	// Sets a new password with the token from a reset link, revokes every session of the
-	// user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
-	// and for a password that breaks the rule.
+	// user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for
+	// an unknown, used or expired token alike, and for a password that breaks the rule.
+	// The token stays usable after UNAVAILABLE.
 	ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error)
 }
 
@@ -144,6 +149,10 @@ func (c *identityServiceClient) ResetPassword(ctx context.Context, in *ResetPass
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations must embed UnimplementedIdentityServiceServer
 // for forward compatibility.
+//
+// Register, Login and ResetPassword hash a password, and fail with UNAVAILABLE when too
+// many are already being hashed. Nothing was done then, so they can be called again
+// shortly.
 type IdentityServiceServer interface {
 	// Creates a user and starts their session. Fails with INVALID_ARGUMENT for an empty
 	// email, a password that breaks the rule or an unspecified role, and ALREADY_EXISTS
@@ -171,8 +180,9 @@ type IdentityServiceServer interface {
 	// succeeds either way, so the caller can't tell which emails are.
 	RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error)
 	// Sets a new password with the token from a reset link, revokes every session of the
-	// user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
-	// and for a password that breaks the rule.
+	// user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for
+	// an unknown, used or expired token alike, and for a password that breaks the rule.
+	// The token stays usable after UNAVAILABLE.
 	ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error)
 	mustEmbedUnimplementedIdentityServiceServer()
 }

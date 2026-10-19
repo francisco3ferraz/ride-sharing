@@ -302,6 +302,11 @@ func TestErrorCodes(t *testing.T) {
 		{name: "no such user", err: account.ErrUserNotFound, want: codes.NotFound},
 		{name: "too many login attempts", err: account.ErrTooManyLoginAttempts, want: codes.ResourceExhausted},
 		{
+			name: "too busy to hash",
+			err:  fmt.Errorf("verify password: %w", password.ErrBusy),
+			want: codes.Unavailable,
+		},
+		{
 			name: "caller cancelled",
 			err:  fmt.Errorf("wait for hashing slot: %w", context.Canceled),
 			want: codes.Canceled,

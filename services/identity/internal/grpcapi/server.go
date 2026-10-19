@@ -154,6 +154,9 @@ func toStatus(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, account.ErrTooManyLoginAttempts):
 		return status.Error(codes.ResourceExhausted, err.Error())
+	// Nothing was done, so the caller can try again shortly.
+	case errors.Is(err, password.ErrBusy):
+		return status.Error(codes.Unavailable, err.Error())
 	// The caller gave up, for example while waiting for a hashing slot. Not our fault.
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return status.FromContextError(err).Err()

@@ -3,6 +3,9 @@ package ridesharing.identity.v1;
 
 import "google/protobuf/timestamp.proto";
 
+// Register, Login and ResetPassword hash a password, and fail with UNAVAILABLE when too
+// many are already being hashed. Nothing was done then, so they can be called again
+// shortly.
 service IdentityService {
   // Creates a user and starts their session. Fails with INVALID_ARGUMENT for an empty
   // email, a password that breaks the rule or an unspecified role, and ALREADY_EXISTS
@@ -30,8 +33,9 @@ service IdentityService {
   // succeeds either way, so the caller can't tell which emails are.
   rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
   // Sets a new password with the token from a reset link, revokes every session of the
-  // user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for an unknown, used or expired token alike,
-  // and for a password that breaks the rule.
+  // user, and lifts every login lockout for their email. Fails with INVALID_ARGUMENT for
+  // an unknown, used or expired token alike, and for a password that breaks the rule.
+  // The token stays usable after UNAVAILABLE.
   rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
 }
 

@@ -6,6 +6,7 @@ info:
     other than GET, HEAD or OPTIONS that a browser sends from another origin gets a 403.
     Requests are rate limited per client address, a logged-in user's per user too, and
     some routes have stricter limits of their own. A request over a limit gets a 429.
+    A request that a busy or unreachable service can't answer gets a 503.
   version: "1.0.0"
   license:
     name: MIT
@@ -54,6 +55,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /v1/auth/register:
     post:
       operationId: registerUser
@@ -88,6 +91,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /v1/auth/login:
     post:
       operationId: login
@@ -127,6 +132,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   # Refresh and logout run on the refresh cookie alone: by the time the web app calls
   # them, the access token has usually expired.
   /v1/auth/refresh:
@@ -154,6 +161,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /v1/auth/logout:
     post:
       operationId: logout
@@ -176,6 +185,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /v1/auth/password-reset:
     post:
       operationId: requestPasswordReset
@@ -204,6 +215,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /v1/auth/password-reset/confirm:
     post:
       operationId: resetPassword
@@ -232,6 +245,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   /v1/me:
     get:
       operationId: getMe
@@ -252,6 +267,8 @@ paths:
           $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
 components:
   headers:
@@ -306,6 +323,16 @@ components:
       headers:
         Retry-After:
           $ref: "#/components/headers/RetryAfter"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: >-
+        A service the request needs is too busy to take it, or can't be reached, in the
+        RFC 9457 problem details format. Nothing was done, so the request can be sent
+        again a moment later. Registration, login and password reset are turned away
+        this way when more arrive than can have their passwords hashed in time.
       content:
         application/problem+json:
           schema:

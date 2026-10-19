@@ -227,6 +227,30 @@ func TestService(t *testing.T) {
 		assert.Zero(t, attempts)
 	})
 
+	t.Run("a right password whose session can't start isn't counted", func(t *testing.T) {
+		user, _, err := svc.Register(ctx, "edite@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+		// Fails the login's transaction after the password checks out, as a context that
+		// ends during the hash does. NOT VALID leaves its existing session alone.
+		_, err = pool.Exec(ctx, "ALTER TABLE sessions ADD CONSTRAINT no_edite CHECK (user_id <> '"+user.ID.String()+"') NOT VALID")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, err := pool.Exec(ctx, "ALTER TABLE sessions DROP CONSTRAINT no_edite")
+			assert.NoError(t, err)
+		})
+
+		for range 6 {
+			_, _, err = svc.Login(ctx, "edite@example.pt", testPassword, testIP)
+			require.Error(t, err)
+			require.NotErrorIs(t, err, ErrTooManyLoginAttempts)
+			require.NotErrorIs(t, err, ErrInvalidCredentials)
+		}
+		var attempts int
+		err = pool.QueryRow(ctx, "SELECT attempts FROM login_attempts WHERE email = 'edite@example.pt'").Scan(&attempts)
+		require.NoError(t, err)
+		assert.Zero(t, attempts)
+	})
+
 	t.Run("get a registered user", func(t *testing.T) {
 		registered, _, err := svc.Register(ctx, "gabriel@example.pt", testPassword, RoleDriver)
 		require.NoError(t, err)

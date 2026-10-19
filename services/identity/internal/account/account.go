@@ -156,6 +156,9 @@ func (s *Service) Login(ctx context.Context, email, pw string, clientIP netip.Ad
 		return err
 	})
 	if err != nil {
+		// The password was right, so this ends without an answer too. Most often ctx
+		// ended during the hash, which can't be interrupted.
+		s.releaseLoginAttempt(ctx, email, clientIP)
 		return User{}, Tokens{}, err
 	}
 

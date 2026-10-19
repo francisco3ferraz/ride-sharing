@@ -49,4 +49,5 @@ type User struct {
 	Role         string
 	CreatedAt    time.Time
 	PasswordHash string
+	Name         pgtype.Text
 }

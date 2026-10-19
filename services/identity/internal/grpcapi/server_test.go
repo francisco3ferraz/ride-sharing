@@ -37,6 +37,7 @@ type fakeAccounts struct {
 	gotEmail    string
 	gotPassword string
 	gotClientIP netip.Addr
+	gotUpdate   account.UserUpdate
 }
 
 func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, account.Tokens, error) {
@@ -77,6 +78,15 @@ func (f *fakeAccounts) GetUser(_ context.Context, userID uuid.UUID) (account.Use
 		return account.User{}, f.err
 	}
 	return account.User{ID: userID, Email: "ana@example.pt", Role: account.RoleRider}, nil
+}
+
+func (f *fakeAccounts) UpdateUser(_ context.Context, userID uuid.UUID, update account.UserUpdate) (account.User, error) {
+	f.called = true
+	f.gotUpdate = update
+	if f.err != nil {
+		return account.User{}, f.err
+	}
+	return account.User{ID: userID, Name: "Ana", Email: "ana@example.pt", Role: account.RoleRider}, nil
 }
 
 func (f *fakeAccounts) RequestPasswordReset(_ context.Context, email string) error {
@@ -257,6 +267,48 @@ func TestGetUserRejectsMalformedIDs(t *testing.T) {
 	}
 }
 
+func TestUpdateUser(t *testing.T) {
+	tests := []struct {
+		name     string
+		req      *identityv1.UpdateUserRequest
+		wantName *string
+	}{
+		{
+			name:     "name set",
+			req:      &identityv1.UpdateUserRequest{UserId: testID.String(), Name: new("Ana Sofia")},
+			wantName: new("Ana Sofia"),
+		},
+		{name: "name left out", req: &identityv1.UpdateUserRequest{UserId: testID.String()}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			accounts := &fakeAccounts{}
+			srv := New(accounts)
+
+			resp, err := srv.UpdateUser(context.Background(), tt.req)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantName, accounts.gotUpdate.Name)
+			assert.Equal(t, testID.String(), resp.GetUser().GetId())
+			assert.Equal(t, "Ana", resp.GetUser().GetName())
+			assert.Equal(t, "ana@example.pt", resp.GetUser().GetEmail())
+			assert.Equal(t, identityv1.Role_ROLE_RIDER, resp.GetUser().GetRole())
+		})
+	}
+}
+
+func TestUpdateUserRejectsMalformedIDs(t *testing.T) {
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
+
+	_, err := srv.UpdateUser(context.Background(), &identityv1.UpdateUserRequest{UserId: "x", Name: new("Ana")})
+
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, "user_id must be a UUID", status.Convert(err).Message())
+	assert.False(t, accounts.called)
+}
+
 func TestRequestPasswordReset(t *testing.T) {
 	accounts := &fakeAccounts{}
 	srv := New(accounts)
@@ -293,6 +345,11 @@ func TestErrorCodes(t *testing.T) {
 		{
 			name: "password breaks the rule",
 			err:  fmt.Errorf("%w: must be at least 15 characters", password.ErrInvalid),
+			want: codes.InvalidArgument,
+		},
+		{
+			name: "name breaks the rule",
+			err:  fmt.Errorf("%w: must not be empty", account.ErrInvalidName),
 			want: codes.InvalidArgument,
 		},
 		{name: "email taken", err: account.ErrEmailTaken, want: codes.AlreadyExists},
@@ -335,13 +392,14 @@ func TestErrorCodes(t *testing.T) {
 			_, refreshErr := srv.Refresh(context.Background(), &identityv1.RefreshRequest{RefreshToken: "refresh-token"})
 			_, logoutErr := srv.Logout(context.Background(), &identityv1.LogoutRequest{RefreshToken: "refresh-token"})
 			_, getUserErr := srv.GetUser(context.Background(), &identityv1.GetUserRequest{UserId: testID.String()})
+			_, updateUserErr := srv.UpdateUser(context.Background(), &identityv1.UpdateUserRequest{UserId: testID.String(), Name: new("Ana")})
 			_, requestResetErr := srv.RequestPasswordReset(context.Background(), &identityv1.RequestPasswordResetRequest{Email: "ana@example.pt"})
 			_, resetErr := srv.ResetPassword(context.Background(), &identityv1.ResetPasswordRequest{
 				Token:    "reset-token",
 				Password: "a brand new long password",
 			})
 
-			for _, err := range []error{registerErr, loginErr, refreshErr, logoutErr, getUserErr, requestResetErr, resetErr} {
+			for _, err := range []error{registerErr, loginErr, refreshErr, logoutErr, getUserErr, updateUserErr, requestResetErr, resetErr} {
 				assert.Equal(t, tt.want, status.Code(err))
 				assert.Equal(t, tt.err.Error(), status.Convert(err).Message())
 			}

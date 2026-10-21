@@ -303,11 +303,11 @@ func TestService(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, registered.Name)
 
-		updated, err := svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("  Lara  ")})
+		updated, err := svc.UpdateUser(ctx, registered.ID, new("  Lara  "))
 		require.NoError(t, err)
 		assert.Equal(t, User{ID: registered.ID, Name: "Lara", Email: "lara@example.pt", Role: RoleRider}, updated)
 
-		updated, err = svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Lara Sousa")})
+		updated, err = svc.UpdateUser(ctx, registered.ID, new("Lara Sousa"))
 		require.NoError(t, err)
 		assert.Equal(t, "Lara Sousa", updated.Name)
 
@@ -322,10 +322,10 @@ func TestService(t *testing.T) {
 	t.Run("an update with nothing to change returns the user as they are", func(t *testing.T) {
 		registered, _, err := svc.Register(ctx, "marta@example.pt", testPassword, RoleDriver)
 		require.NoError(t, err)
-		named, err := svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Marta")})
+		named, err := svc.UpdateUser(ctx, registered.ID, new("Marta"))
 		require.NoError(t, err)
 
-		got, err := svc.UpdateUser(ctx, registered.ID, UserUpdate{})
+		got, err := svc.UpdateUser(ctx, registered.ID, nil)
 		require.NoError(t, err)
 		assert.Equal(t, named, got)
 	})
@@ -333,10 +333,10 @@ func TestService(t *testing.T) {
 	t.Run("a name that breaks the rule leaves the old one", func(t *testing.T) {
 		registered, _, err := svc.Register(ctx, "wanda@example.pt", testPassword, RoleRider)
 		require.NoError(t, err)
-		_, err = svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Wanda")})
+		_, err = svc.UpdateUser(ctx, registered.ID, new("Wanda"))
 		require.NoError(t, err)
 
-		_, err = svc.UpdateUser(ctx, registered.ID, UserUpdate{Name: new("Wan\x00da")})
+		_, err = svc.UpdateUser(ctx, registered.ID, new("Wan\x00da"))
 		require.ErrorIs(t, err, ErrInvalidName)
 
 		got, err := svc.GetUser(ctx, registered.ID)
@@ -345,10 +345,10 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("update an unknown user", func(t *testing.T) {
-		_, err := svc.UpdateUser(ctx, uuid.New(), UserUpdate{Name: new("Ana")})
+		_, err := svc.UpdateUser(ctx, uuid.New(), new("Ana"))
 		require.ErrorIs(t, err, ErrUserNotFound)
 
-		_, err = svc.UpdateUser(ctx, uuid.New(), UserUpdate{})
+		_, err = svc.UpdateUser(ctx, uuid.New(), nil)
 		assert.ErrorIs(t, err, ErrUserNotFound)
 	})
 

@@ -776,7 +776,7 @@ func (x *GetUserResponse) GetUser() *User {
 type UpdateUserRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	// optional, so that leaving it out can't be mistaken for an empty name.
+	// optional, so that leaving it out keeps the name rather than emptying it.
 	Name          *string `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

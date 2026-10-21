@@ -126,7 +126,7 @@ message GetUserResponse {
 
 message UpdateUserRequest {
   string user_id = 1;
-  // optional, so that leaving it out can't be mistaken for an empty name.
+  // optional, so that leaving it out keeps the name rather than emptying it.
   optional string name = 2;
 }
 

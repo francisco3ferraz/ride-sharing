@@ -191,7 +191,7 @@ func userFromProto(user *identityv1.User) (api.User, error) {
 		return api.User{}, err
 	}
 	apiUser := api.User{Id: id, Email: user.GetEmail(), Role: role}
-	// Identity sends "" for a name the user hasn't set, and the API leaves it out.
+	// Unset, it's "" from Identity and left out of the API's User.
 	if name := user.GetName(); name != "" {
 		apiUser.Name = &name
 	}

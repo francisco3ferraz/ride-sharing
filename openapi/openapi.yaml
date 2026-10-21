@@ -466,13 +466,11 @@ components:
       enum: [rider, driver]
     UpdateMeRequest:
       type: object
-      # A misspelt field would otherwise be ignored, and the change silently not made.
+      # Otherwise a misspelt field is ignored, and the change silently not made.
       additionalProperties: false
-      # Not nullable: the generated code reads null and a missing field alike, as nil, so
-      # a null would mean "unchanged" rather than an error.
+      # Not nullable: the generated code reads null as nil, the same as a missing field.
       properties:
-        # No minLength or maxLength: Identity owns the rule, and its 400 says which part
-        # failed. The description is for clients building a form.
+        # No length limits: Identity owns the rule.
         name:
           type: string
           description: >-

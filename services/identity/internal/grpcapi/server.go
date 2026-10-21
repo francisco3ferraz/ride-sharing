@@ -26,7 +26,7 @@ type AccountService interface {
 	Refresh(ctx context.Context, token string) (account.Tokens, error)
 	Logout(ctx context.Context, token string) error
 	GetUser(ctx context.Context, userID uuid.UUID) (account.User, error)
-	UpdateUser(ctx context.Context, userID uuid.UUID, update account.UserUpdate) (account.User, error)
+	UpdateUser(ctx context.Context, userID uuid.UUID, name *string) (account.User, error)
 	RequestPasswordReset(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, token, pw string) error
 }
@@ -93,9 +93,11 @@ func (s *Server) Logout(ctx context.Context, req *identityv1.LogoutRequest) (*id
 }
 
 func (s *Server) GetUser(ctx context.Context, req *identityv1.GetUserRequest) (*identityv1.GetUserResponse, error) {
-	userID, err := parseUserID(req.GetUserId())
+	// Not uuid's own error, which describes its parser ("invalid UUID length: 1"), and
+	// INVALID_ARGUMENT messages are shown to the caller.
+	userID, err := uuid.Parse(req.GetUserId())
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
 	}
 
 	user, err := s.accounts.GetUser(ctx, userID)
@@ -106,12 +108,12 @@ func (s *Server) GetUser(ctx context.Context, req *identityv1.GetUserRequest) (*
 }
 
 func (s *Server) UpdateUser(ctx context.Context, req *identityv1.UpdateUserRequest) (*identityv1.UpdateUserResponse, error) {
-	userID, err := parseUserID(req.GetUserId())
+	userID, err := uuid.Parse(req.GetUserId())
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
 	}
 
-	user, err := s.accounts.UpdateUser(ctx, userID, account.UserUpdate{Name: req.Name})
+	user, err := s.accounts.UpdateUser(ctx, userID, req.Name)
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -140,16 +142,6 @@ func (s *Server) ResetPassword(ctx context.Context, req *identityv1.ResetPasswor
 		return nil, toStatus(err)
 	}
 	return &identityv1.ResetPasswordResponse{}, nil
-}
-
-// parseUserID's error isn't uuid's own, which describes its parser ("invalid UUID
-// length: 1"), since INVALID_ARGUMENT messages are shown to the caller.
-func parseUserID(id string) (uuid.UUID, error) {
-	userID, err := uuid.Parse(id)
-	if err != nil {
-		return uuid.Nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
-	}
-	return userID, nil
 }
 
 // clientIPKey is the metadata entry the Edge sends the client's address in.

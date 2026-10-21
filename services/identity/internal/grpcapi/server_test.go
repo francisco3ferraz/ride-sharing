@@ -38,7 +38,7 @@ type fakeAccounts struct {
 	gotEmail    string
 	gotPassword string
 	gotClientIP netip.Addr
-	gotUpdate   account.UserUpdate
+	gotName     *string
 }
 
 func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, account.Tokens, error) {
@@ -81,9 +81,9 @@ func (f *fakeAccounts) GetUser(_ context.Context, userID uuid.UUID) (account.Use
 	return account.User{ID: userID, Email: "ana@example.pt", Role: account.RoleRider}, nil
 }
 
-func (f *fakeAccounts) UpdateUser(_ context.Context, userID uuid.UUID, update account.UserUpdate) (account.User, error) {
+func (f *fakeAccounts) UpdateUser(_ context.Context, userID uuid.UUID, name *string) (account.User, error) {
 	f.called = true
-	f.gotUpdate = update
+	f.gotName = name
 	if f.err != nil {
 		return account.User{}, f.err
 	}
@@ -290,7 +290,7 @@ func TestUpdateUser(t *testing.T) {
 			resp, err := srv.UpdateUser(context.Background(), tt.req)
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantName, accounts.gotUpdate.Name)
+			assert.Equal(t, tt.wantName, accounts.gotName)
 			assert.Equal(t, testID.String(), resp.GetUser().GetId())
 			assert.Equal(t, "Ana", resp.GetUser().GetName())
 			assert.Equal(t, "ana@example.pt", resp.GetUser().GetEmail())

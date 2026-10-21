@@ -40,11 +40,6 @@ type User struct {
 	Role  Role
 }
 
-// UserUpdate holds the changes to make to a user. A nil field stays as it is.
-type UserUpdate struct {
-	Name *string
-}
-
 type Token struct {
 	Value     string
 	ExpiresAt time.Time
@@ -72,7 +67,6 @@ var (
 	ErrInvalidName = errors.New("invalid name")
 )
 
-// A name is shown to the other person on a trip, as the user typed it.
 const maxNameRunes = 50
 
 // After this many failed logins for one email from one address within 15 minutes, that
@@ -375,23 +369,21 @@ func (s *Service) GetUser(ctx context.Context, userID uuid.UUID) (User, error) {
 		return User{}, fmt.Errorf("get user: %w", err)
 	}
 
-	// A NULL name's String is "".
 	return User{ID: row.ID, Name: row.Name.String, Email: row.Email, Role: Role(row.Role)}, nil
 }
 
-// UpdateUser makes the update's changes and returns the user as they then are. With
-// nothing to change, it returns the user as they are.
-func (s *Service) UpdateUser(ctx context.Context, userID uuid.UUID, update UserUpdate) (User, error) {
-	if update.Name == nil {
+// UpdateUser sets the user's name, unless it's nil, and returns the user.
+func (s *Service) UpdateUser(ctx context.Context, userID uuid.UUID, name *string) (User, error) {
+	if name == nil {
 		return s.GetUser(ctx, userID)
 	}
-	name, err := cleanName(*update.Name)
+	cleaned, err := cleanName(*name)
 	if err != nil {
 		// Unwrapped: its message is shown to the user.
 		return User{}, err
 	}
 
-	row, err := s.queries.UpdateUserName(ctx, db.UpdateUserNameParams{ID: userID, Name: pgtype.Text{String: name, Valid: true}})
+	row, err := s.queries.UpdateUserName(ctx, db.UpdateUserNameParams{ID: userID, Name: pgtype.Text{String: cleaned, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrUserNotFound
 	}
@@ -401,7 +393,6 @@ func (s *Service) UpdateUser(ctx context.Context, userID uuid.UUID, update UserU
 	return User{ID: row.ID, Name: row.Name.String, Email: row.Email, Role: Role(row.Role)}, nil
 }
 
-// cleanName trims the name, and checks what's left against the rule.
 func cleanName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	switch n := utf8.RuneCountInString(name); {
@@ -410,9 +401,7 @@ func cleanName(name string) (string, error) {
 	case n > maxNameRunes:
 		return "", fmt.Errorf("%w: must be at most %d characters", ErrInvalidName, maxNameRunes)
 	}
-	// JSON allows NUL as \u0000, and Postgres rejects it in text, which would make the
-	// update a 500. Line breaks and other control characters don't belong in a name
-	// either.
+	// Postgres rejects NUL, which JSON allows as \u0000, so without this it'd be a 500.
 	if strings.ContainsFunc(name, unicode.IsControl) {
 		return "", fmt.Errorf("%w: must not contain control characters", ErrInvalidName)
 	}

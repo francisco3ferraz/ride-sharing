@@ -1,0 +1,34 @@
+syntax = "proto3";
+package ridesharing.location.v1;
+
+// Every RPC acts for the driver in the call's user-id and user-role metadata, which the
+// Edge sets from the access token. It fails with INTERNAL when either is missing or
+// malformed, PERMISSION_DENIED when the role isn't driver, and UNAVAILABLE when Valkey
+// can't answer.
+service LocationService {
+  // Puts the driver online at the position. Being online lapses unless it's renewed
+  // within about 30 seconds, and calling GoOnline again renews it. Fails with
+  // INVALID_ARGUMENT for a missing or invalid position, FAILED_PRECONDITION when the
+  // driver hasn't saved a vehicle, and UNAVAILABLE when Identity can't answer.
+  rpc GoOnline(GoOnlineRequest) returns (GoOnlineResponse);
+  // Takes the driver offline. A driver who isn't online isn't an error.
+  rpc GoOffline(GoOfflineRequest) returns (GoOfflineResponse);
+}
+
+// A point in WGS 84 degrees, as a phone's GPS reports it. Latitude must be within
+// ±85.05112878, the limit of Valkey's GEO commands, and longitude within ±180.
+message Position {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+message GoOnlineRequest {
+  // Required. A message, so a missing one reads as unset rather than as (0, 0).
+  Position position = 1;
+}
+
+message GoOnlineResponse {}
+
+message GoOfflineRequest {}
+
+message GoOfflineResponse {}

@@ -18,6 +18,7 @@ import (
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/account"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/password"
+	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/vehicle"
 )
 
 var testID = uuid.MustParse("0199d3a2-7c41-7b1e-9f2a-3c5d8e6f1a2b")
@@ -307,6 +308,20 @@ func TestUpdateUserRejectsMalformedIDs(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	assert.Equal(t, "user_id must be a UUID", status.Convert(err).Message())
 	assert.False(t, accounts.called)
+}
+
+func TestGetVehicleCatalog(t *testing.T) {
+	srv := New(&fakeAccounts{})
+
+	resp, err := srv.GetVehicleCatalog(context.Background(), &identityv1.GetVehicleCatalogRequest{})
+
+	require.NoError(t, err)
+	require.Len(t, resp.GetMakes(), len(vehicle.Makes))
+	for i, m := range vehicle.Makes {
+		assert.Equal(t, m.Name, resp.GetMakes()[i].GetName())
+		assert.Equal(t, m.Models, resp.GetMakes()[i].GetModels())
+	}
+	assert.Equal(t, vehicle.Colours, resp.GetColours())
 }
 
 func TestRequestPasswordReset(t *testing.T) {

@@ -1,5 +1,5 @@
 // Package grpcapi exposes the Identity service over gRPC. It validates requests and
-// translates between protobuf messages and the account package.
+// translates between protobuf messages and the account and vehicle packages.
 package grpcapi
 
 import (
@@ -16,6 +16,7 @@ import (
 	identityv1 "github.com/francisco3ferraz/ride-sharing/gen/ridesharing/identity/v1"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/account"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/password"
+	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/vehicle"
 )
 
 // AccountService is what Server needs from *account.Service, so tests can replace it.
@@ -115,6 +116,14 @@ func (s *Server) UpdateUser(ctx context.Context, req *identityv1.UpdateUserReque
 		return nil, toStatus(err)
 	}
 	return &identityv1.UpdateUserResponse{User: userToProto(user)}, nil
+}
+
+func (s *Server) GetVehicleCatalog(context.Context, *identityv1.GetVehicleCatalogRequest) (*identityv1.GetVehicleCatalogResponse, error) {
+	resp := &identityv1.GetVehicleCatalogResponse{Colours: vehicle.Colours}
+	for _, m := range vehicle.Makes {
+		resp.Makes = append(resp.Makes, &identityv1.VehicleMake{Name: m.Name, Models: m.Models})
+	}
+	return resp, nil
 }
 
 // An empty email isn't INVALID_ARGUMENT: it matches no user, so it succeeds like any

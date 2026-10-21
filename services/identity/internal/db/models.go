@@ -51,3 +51,11 @@ type User struct {
 	PasswordHash string
 	Name         pgtype.Text
 }
+
+type Vehicle struct {
+	UserID uuid.UUID
+	Make   string
+	Model  string
+	Colour string
+	Plate  string
+}

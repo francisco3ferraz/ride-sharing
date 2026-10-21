@@ -37,6 +37,15 @@ service IdentityService {
   // Returns the makes, models and colours a driver's vehicle can have, in the order a
   // form lists them.
   rpc GetVehicleCatalog(GetVehicleCatalogRequest) returns (GetVehicleCatalogResponse);
+  // Creates or replaces the driver's vehicle, and returns it with the plate in canonical
+  // form, such as AA-00-AA. Fails with INVALID_ARGUMENT for an ID that isn't a UUID or
+  // details that break the rules, PERMISSION_DENIED for a rider, ALREADY_EXISTS for a
+  // plate another driver has, and NOT_FOUND when no user has the ID. Like GetUser, it
+  // doesn't check who's asking.
+  rpc PutVehicle(PutVehicleRequest) returns (PutVehicleResponse);
+  // Returns the user's vehicle. Fails with INVALID_ARGUMENT for an ID that isn't a UUID,
+  // and NOT_FOUND when the user has none, as every rider does.
+  rpc GetVehicle(GetVehicleRequest) returns (GetVehicleResponse);
   // Emails the user a link to reset their password, if the email is registered. It
   // succeeds either way, so the caller can't tell which emails are.
   rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
@@ -145,6 +154,32 @@ message GetVehicleCatalogRequest {}
 message GetVehicleCatalogResponse {
   repeated VehicleMake makes = 1;
   repeated string colours = 2;
+}
+
+message Vehicle {
+  string make = 1;
+  string model = 2;
+  string colour = 3;
+  string plate = 4;
+}
+
+message PutVehicleRequest {
+  string user_id = 1;
+  Vehicle vehicle = 2;
+}
+
+message PutVehicleResponse {
+  Vehicle vehicle = 1;
+  // False when it replaced one the driver had.
+  bool created = 2;
+}
+
+message GetVehicleRequest {
+  string user_id = 1;
+}
+
+message GetVehicleResponse {
+  Vehicle vehicle = 1;
 }
 
 message RequestPasswordResetRequest {

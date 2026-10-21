@@ -32,6 +32,8 @@ type fakeIdentity struct {
 	user                    *identityv1.User
 	tokens                  *identityv1.Tokens
 	catalog                 *identityv1.GetVehicleCatalogResponse
+	vehicle                 *identityv1.Vehicle
+	created                 bool
 	err                     error
 	gotRegister             *identityv1.RegisterRequest
 	gotLogin                *identityv1.LoginRequest
@@ -40,6 +42,8 @@ type fakeIdentity struct {
 	gotGetUser              *identityv1.GetUserRequest
 	gotUpdateUser           *identityv1.UpdateUserRequest
 	gotGetVehicleCatalog    *identityv1.GetVehicleCatalogRequest
+	gotPutVehicle           *identityv1.PutVehicleRequest
+	gotGetVehicle           *identityv1.GetVehicleRequest
 	gotRequestPasswordReset *identityv1.RequestPasswordResetRequest
 	gotResetPassword        *identityv1.ResetPasswordRequest
 }
@@ -98,6 +102,22 @@ func (f *fakeIdentity) GetVehicleCatalog(_ context.Context, req *identityv1.GetV
 		return nil, f.err
 	}
 	return f.catalog, nil
+}
+
+func (f *fakeIdentity) PutVehicle(_ context.Context, req *identityv1.PutVehicleRequest, _ ...grpc.CallOption) (*identityv1.PutVehicleResponse, error) {
+	f.gotPutVehicle = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.PutVehicleResponse{Vehicle: f.vehicle, Created: f.created}, nil
+}
+
+func (f *fakeIdentity) GetVehicle(_ context.Context, req *identityv1.GetVehicleRequest, _ ...grpc.CallOption) (*identityv1.GetVehicleResponse, error) {
+	f.gotGetVehicle = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &identityv1.GetVehicleResponse{Vehicle: f.vehicle}, nil
 }
 
 func (f *fakeIdentity) RequestPasswordReset(_ context.Context, req *identityv1.RequestPasswordResetRequest, _ ...grpc.CallOption) (*identityv1.RequestPasswordResetResponse, error) {

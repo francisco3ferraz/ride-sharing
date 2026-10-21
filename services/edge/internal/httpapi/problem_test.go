@@ -42,6 +42,26 @@ func TestResponseError(t *testing.T) {
 			},
 		},
 		{
+			name: "a rider on a driver's route is shown why",
+			err:  status.Error(codes.PermissionDenied, "only drivers have a vehicle"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Forbidden",
+				Status: http.StatusForbidden,
+				Detail: new("only drivers have a vehicle"),
+			},
+		},
+		{
+			name: "something missing is shown to the client",
+			err:  status.Error(codes.NotFound, "no vehicle saved yet"),
+			want: api.Problem{
+				Type:   "about:blank",
+				Title:  "Not Found",
+				Status: http.StatusNotFound,
+				Detail: new("no vehicle saved yet"),
+			},
+		},
+		{
 			name: "conflict is shown to the client",
 			err:  status.Error(codes.AlreadyExists, "email is already registered"),
 			want: api.Problem{

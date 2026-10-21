@@ -27,6 +27,8 @@ func requestError(w http.ResponseWriter, _ *http.Request, err error) {
 var clientErrorStatuses = map[codes.Code]int{
 	codes.InvalidArgument:   http.StatusBadRequest,
 	codes.Unauthenticated:   http.StatusUnauthorized,
+	codes.PermissionDenied:  http.StatusForbidden,
+	codes.NotFound:          http.StatusNotFound,
 	codes.AlreadyExists:     http.StatusConflict,
 	codes.ResourceExhausted: http.StatusTooManyRequests,
 }

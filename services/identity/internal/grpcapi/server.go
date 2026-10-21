@@ -27,6 +27,8 @@ type AccountService interface {
 	Logout(ctx context.Context, token string) error
 	GetUser(ctx context.Context, userID uuid.UUID) (account.User, error)
 	UpdateUser(ctx context.Context, userID uuid.UUID, name *string) (account.User, error)
+	PutVehicle(ctx context.Context, userID uuid.UUID, v account.Vehicle) (account.Vehicle, bool, error)
+	GetVehicle(ctx context.Context, userID uuid.UUID) (account.Vehicle, error)
 	RequestPasswordReset(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, token, pw string) error
 }
@@ -128,6 +130,35 @@ func (s *Server) GetVehicleCatalog(context.Context, *identityv1.GetVehicleCatalo
 	return resp, nil
 }
 
+func (s *Server) PutVehicle(ctx context.Context, req *identityv1.PutVehicleRequest) (*identityv1.PutVehicleResponse, error) {
+	userID, err := uuid.Parse(req.GetUserId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
+	}
+
+	v := req.GetVehicle()
+	saved, created, err := s.accounts.PutVehicle(ctx, userID, account.Vehicle{
+		Make: v.GetMake(), Model: v.GetModel(), Colour: v.GetColour(), Plate: v.GetPlate(),
+	})
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &identityv1.PutVehicleResponse{Vehicle: vehicleToProto(saved), Created: created}, nil
+}
+
+func (s *Server) GetVehicle(ctx context.Context, req *identityv1.GetVehicleRequest) (*identityv1.GetVehicleResponse, error) {
+	userID, err := uuid.Parse(req.GetUserId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
+	}
+
+	v, err := s.accounts.GetVehicle(ctx, userID)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return &identityv1.GetVehicleResponse{Vehicle: vehicleToProto(v)}, nil
+}
+
 // An empty email isn't INVALID_ARGUMENT: it matches no user, so it succeeds like any
 // unknown one.
 func (s *Server) RequestPasswordReset(ctx context.Context, req *identityv1.RequestPasswordResetRequest) (*identityv1.RequestPasswordResetResponse, error) {
@@ -168,13 +199,15 @@ func toStatus(err error) error {
 	switch {
 	// The Edge shows InvalidArgument messages to the user. These are written for them.
 	case errors.Is(err, password.ErrInvalid), errors.Is(err, account.ErrInvalidResetToken),
-		errors.Is(err, account.ErrInvalidName):
+		errors.Is(err, account.ErrInvalidName), errors.Is(err, vehicle.ErrInvalid):
 		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, account.ErrEmailTaken):
+	case errors.Is(err, account.ErrEmailTaken), errors.Is(err, account.ErrPlateTaken):
 		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, account.ErrNotDriver):
+		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, account.ErrInvalidCredentials), errors.Is(err, account.ErrInvalidRefreshToken):
 		return status.Error(codes.Unauthenticated, err.Error())
-	case errors.Is(err, account.ErrUserNotFound):
+	case errors.Is(err, account.ErrUserNotFound), errors.Is(err, account.ErrNoVehicle):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, account.ErrTooManyLoginAttempts):
 		return status.Error(codes.ResourceExhausted, err.Error())
@@ -222,6 +255,10 @@ func userToProto(user account.User) *identityv1.User {
 		Role:  roleToProto(user.Role),
 		Name:  user.Name,
 	}
+}
+
+func vehicleToProto(v account.Vehicle) *identityv1.Vehicle {
+	return &identityv1.Vehicle{Make: v.Make, Model: v.Model, Colour: v.Colour, Plate: v.Plate}
 }
 
 func tokensToProto(tokens account.Tokens) *identityv1.Tokens {

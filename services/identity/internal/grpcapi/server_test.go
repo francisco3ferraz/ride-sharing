@@ -23,6 +23,8 @@ import (
 
 var testID = uuid.MustParse("0199d3a2-7c41-7b1e-9f2a-3c5d8e6f1a2b")
 
+var testVehicle = account.Vehicle{Make: "Toyota", Model: "Corolla", Colour: "White", Plate: "AA-01-BC"}
+
 var testTokens = account.Tokens{
 	Access:  account.Token{Value: "access-token", ExpiresAt: time.Date(2026, 10, 13, 9, 45, 0, 0, time.UTC)},
 	Refresh: account.Token{Value: "refresh-token", ExpiresAt: time.Date(2026, 10, 20, 9, 30, 0, 0, time.UTC)},
@@ -39,6 +41,7 @@ type fakeAccounts struct {
 	gotPassword string
 	gotClientIP netip.Addr
 	gotName     *string
+	gotVehicle  account.Vehicle
 }
 
 func (f *fakeAccounts) Register(_ context.Context, email, _ string, role account.Role) (account.User, account.Tokens, error) {
@@ -88,6 +91,23 @@ func (f *fakeAccounts) UpdateUser(_ context.Context, userID uuid.UUID, name *str
 		return account.User{}, f.err
 	}
 	return account.User{ID: userID, Name: "Ana", Email: "ana@example.pt", Role: account.RoleRider}, nil
+}
+
+func (f *fakeAccounts) PutVehicle(_ context.Context, _ uuid.UUID, v account.Vehicle) (account.Vehicle, bool, error) {
+	f.called = true
+	f.gotVehicle = v
+	if f.err != nil {
+		return account.Vehicle{}, false, f.err
+	}
+	return v, true, nil
+}
+
+func (f *fakeAccounts) GetVehicle(context.Context, uuid.UUID) (account.Vehicle, error) {
+	f.called = true
+	if f.err != nil {
+		return account.Vehicle{}, f.err
+	}
+	return testVehicle, nil
 }
 
 func (f *fakeAccounts) RequestPasswordReset(_ context.Context, email string) error {
@@ -324,6 +344,47 @@ func TestGetVehicleCatalog(t *testing.T) {
 	assert.Equal(t, vehicle.Colours, resp.GetColours())
 }
 
+func TestPutVehicle(t *testing.T) {
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
+
+	resp, err := srv.PutVehicle(context.Background(), &identityv1.PutVehicleRequest{
+		UserId:  testID.String(),
+		Vehicle: &identityv1.Vehicle{Make: "Toyota", Model: "Corolla", Colour: "White", Plate: "AA-01-BC"},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, testVehicle, accounts.gotVehicle)
+	assert.True(t, resp.GetCreated())
+	assert.Equal(t, "Toyota", resp.GetVehicle().GetMake())
+	assert.Equal(t, "Corolla", resp.GetVehicle().GetModel())
+	assert.Equal(t, "White", resp.GetVehicle().GetColour())
+	assert.Equal(t, "AA-01-BC", resp.GetVehicle().GetPlate())
+}
+
+func TestGetVehicle(t *testing.T) {
+	srv := New(&fakeAccounts{})
+
+	resp, err := srv.GetVehicle(context.Background(), &identityv1.GetVehicleRequest{UserId: testID.String()})
+
+	require.NoError(t, err)
+	assert.Equal(t, "AA-01-BC", resp.GetVehicle().GetPlate())
+}
+
+func TestVehicleRPCsRejectMalformedIDs(t *testing.T) {
+	accounts := &fakeAccounts{}
+	srv := New(accounts)
+
+	_, putErr := srv.PutVehicle(context.Background(), &identityv1.PutVehicleRequest{UserId: "x"})
+	_, getErr := srv.GetVehicle(context.Background(), &identityv1.GetVehicleRequest{UserId: "x"})
+
+	for _, err := range []error{putErr, getErr} {
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+		assert.Equal(t, "user_id must be a UUID", status.Convert(err).Message())
+	}
+	assert.False(t, accounts.called)
+}
+
 func TestRequestPasswordReset(t *testing.T) {
 	accounts := &fakeAccounts{}
 	srv := New(accounts)
@@ -367,7 +428,15 @@ func TestErrorCodes(t *testing.T) {
 			err:  fmt.Errorf("%w: must not be empty", account.ErrInvalidName),
 			want: codes.InvalidArgument,
 		},
+		{
+			name: "vehicle breaks the rules",
+			err:  fmt.Errorf("%w: make isn't in the catalog", vehicle.ErrInvalid),
+			want: codes.InvalidArgument,
+		},
 		{name: "email taken", err: account.ErrEmailTaken, want: codes.AlreadyExists},
+		{name: "plate taken", err: account.ErrPlateTaken, want: codes.AlreadyExists},
+		{name: "not a driver", err: account.ErrNotDriver, want: codes.PermissionDenied},
+		{name: "no vehicle", err: account.ErrNoVehicle, want: codes.NotFound},
 		{name: "invalid credentials", err: account.ErrInvalidCredentials, want: codes.Unauthenticated},
 		{name: "invalid refresh token", err: account.ErrInvalidRefreshToken, want: codes.Unauthenticated},
 		{name: "invalid reset token", err: account.ErrInvalidResetToken, want: codes.InvalidArgument},
@@ -408,13 +477,15 @@ func TestErrorCodes(t *testing.T) {
 			_, logoutErr := srv.Logout(context.Background(), &identityv1.LogoutRequest{RefreshToken: "refresh-token"})
 			_, getUserErr := srv.GetUser(context.Background(), &identityv1.GetUserRequest{UserId: testID.String()})
 			_, updateUserErr := srv.UpdateUser(context.Background(), &identityv1.UpdateUserRequest{UserId: testID.String(), Name: new("Ana")})
+			_, putVehicleErr := srv.PutVehicle(context.Background(), &identityv1.PutVehicleRequest{UserId: testID.String()})
+			_, getVehicleErr := srv.GetVehicle(context.Background(), &identityv1.GetVehicleRequest{UserId: testID.String()})
 			_, requestResetErr := srv.RequestPasswordReset(context.Background(), &identityv1.RequestPasswordResetRequest{Email: "ana@example.pt"})
 			_, resetErr := srv.ResetPassword(context.Background(), &identityv1.ResetPasswordRequest{
 				Token:    "reset-token",
 				Password: "a brand new long password",
 			})
 
-			for _, err := range []error{registerErr, loginErr, refreshErr, logoutErr, getUserErr, updateUserErr, requestResetErr, resetErr} {
+			for _, err := range []error{registerErr, loginErr, refreshErr, logoutErr, getUserErr, updateUserErr, putVehicleErr, getVehicleErr, requestResetErr, resetErr} {
 				assert.Equal(t, tt.want, status.Code(err))
 				assert.Equal(t, tt.err.Error(), status.Convert(err).Message())
 			}

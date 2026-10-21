@@ -110,6 +110,16 @@ type User struct {
 	Role Role    `json:"role"`
 }
 
+// Vehicle defines model for Vehicle.
+type Vehicle struct {
+	Colour string `json:"colour"`
+	Make   string `json:"make"`
+	Model  string `json:"model"`
+
+	// Plate A Portuguese plate in any of its layouts, such as AA-00-AA or 00-AA-00, in any case and with or without spaces and hyphens. It's stored and returned as upper case with hyphens.
+	Plate string `json:"plate"`
+}
+
 // VehicleCatalog defines model for VehicleCatalog.
 type VehicleCatalog struct {
 	Colours []string      `json:"colours"`
@@ -167,6 +177,9 @@ type RegisterUserJSONRequestBody = RegisterRequest
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
 
+// PutMyVehicleJSONRequestBody defines body for PutMyVehicle for application/json ContentType.
+type PutMyVehicleJSONRequestBody = Vehicle
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Login Checks an email and password, and starts a session for their user.
@@ -196,6 +209,12 @@ type ServerInterface interface {
 	// UpdateMe Changes the logged-in user's profile.
 	// (PATCH /v1/me)
 	UpdateMe(w http.ResponseWriter, r *http.Request)
+	// GetMyVehicle Returns the logged-in driver's vehicle.
+	// (GET /v1/me/vehicle)
+	GetMyVehicle(w http.ResponseWriter, r *http.Request)
+	// PutMyVehicle Saves the logged-in driver's vehicle, replacing any they had.
+	// (PUT /v1/me/vehicle)
+	PutMyVehicle(w http.ResponseWriter, r *http.Request)
 	// GetVehicleCatalog Returns the makes, models and colours a driver's vehicle can have.
 	// (GET /v1/vehicle-catalog)
 	GetVehicleCatalog(w http.ResponseWriter, r *http.Request)
@@ -410,6 +429,34 @@ func (siw *ServerInterfaceWrapper) UpdateMe(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// GetMyVehicle operation middleware
+func (siw *ServerInterfaceWrapper) GetMyVehicle(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMyVehicle(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutMyVehicle operation middleware
+func (siw *ServerInterfaceWrapper) PutMyVehicle(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutMyVehicle(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetVehicleCatalog operation middleware
 func (siw *ServerInterfaceWrapper) GetVehicleCatalog(w http.ResponseWriter, r *http.Request) {
 
@@ -553,6 +600,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/auth/password-reset/confirm", wrapper.ResetPassword)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/v1/me", wrapper.UpdateMe)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/me/vehicle", wrapper.GetMyVehicle)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/me/vehicle", wrapper.PutMyVehicle)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/vehicle-catalog", wrapper.GetVehicleCatalog)
 
 	return m
@@ -1561,6 +1610,277 @@ func (response UpdateMe503ApplicationProblemPlusJSONResponse) VisitUpdateMeRespo
 	return err
 }
 
+type GetMyVehicleRequestObject struct {
+}
+
+type GetMyVehicleResponseObject interface {
+	VisitGetMyVehicleResponse(w http.ResponseWriter) error
+}
+
+type GetMyVehicle200JSONResponse Vehicle
+
+func (response GetMyVehicle200JSONResponse) VisitGetMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyVehicle401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyVehicle401ApplicationProblemPlusJSONResponse) VisitGetMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyVehicle403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMyVehicle403ApplicationProblemPlusJSONResponse) VisitGetMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyVehicle404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMyVehicle404ApplicationProblemPlusJSONResponse) VisitGetMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyVehicle429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyVehicle429ApplicationProblemPlusJSONResponse) VisitGetMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyVehicle500ApplicationProblemPlusJSONResponse Problem
+
+func (response GetMyVehicle500ApplicationProblemPlusJSONResponse) VisitGetMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMyVehicle503ApplicationProblemPlusJSONResponse struct {
+	ServiceUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response GetMyVehicle503ApplicationProblemPlusJSONResponse) VisitGetMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicleRequestObject struct {
+	Body *PutMyVehicleJSONRequestBody
+}
+
+type PutMyVehicleResponseObject interface {
+	VisitPutMyVehicleResponse(w http.ResponseWriter) error
+}
+
+type PutMyVehicle200JSONResponse Vehicle
+
+func (response PutMyVehicle200JSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle201JSONResponse Vehicle
+
+func (response PutMyVehicle201JSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PutMyVehicle400ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle401ApplicationProblemPlusJSONResponse Problem
+
+func (response PutMyVehicle401ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle403ApplicationProblemPlusJSONResponse Problem
+
+func (response PutMyVehicle403ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle409ApplicationProblemPlusJSONResponse Problem
+
+func (response PutMyVehicle409ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle413ApplicationProblemPlusJSONResponse Problem
+
+func (response PutMyVehicle413ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response PutMyVehicle429ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle500ApplicationProblemPlusJSONResponse Problem
+
+func (response PutMyVehicle500ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMyVehicle503ApplicationProblemPlusJSONResponse struct {
+	ServiceUnavailableApplicationProblemPlusJSONResponse
+}
+
+func (response PutMyVehicle503ApplicationProblemPlusJSONResponse) VisitPutMyVehicleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetVehicleCatalogRequestObject struct {
 }
 
@@ -1662,6 +1982,12 @@ type StrictServerInterface interface {
 	// UpdateMe Changes the logged-in user's profile.
 	// (PATCH /v1/me)
 	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// GetMyVehicle Returns the logged-in driver's vehicle.
+	// (GET /v1/me/vehicle)
+	GetMyVehicle(ctx context.Context, request GetMyVehicleRequestObject) (GetMyVehicleResponseObject, error)
+	// PutMyVehicle Saves the logged-in driver's vehicle, replacing any they had.
+	// (PUT /v1/me/vehicle)
+	PutMyVehicle(ctx context.Context, request PutMyVehicleRequestObject) (PutMyVehicleResponseObject, error)
 	// GetVehicleCatalog Returns the makes, models and colours a driver's vehicle can have.
 	// (GET /v1/vehicle-catalog)
 	GetVehicleCatalog(ctx context.Context, request GetVehicleCatalogRequestObject) (GetVehicleCatalogResponseObject, error)
@@ -1963,6 +2289,61 @@ func (sh *strictHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// GetMyVehicle operation middleware
+func (sh *strictHandler) GetMyVehicle(w http.ResponseWriter, r *http.Request) {
+	var request GetMyVehicleRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMyVehicle(ctx, request.(GetMyVehicleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMyVehicle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMyVehicleResponseObject); ok {
+		if err := validResponse.VisitGetMyVehicleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutMyVehicle operation middleware
+func (sh *strictHandler) PutMyVehicle(w http.ResponseWriter, r *http.Request) {
+	var request PutMyVehicleRequestObject
+
+	var body PutMyVehicleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutMyVehicle(ctx, request.(PutMyVehicleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutMyVehicle")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutMyVehicleResponseObject); ok {
+		if err := validResponse.VisitPutMyVehicleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetVehicleCatalog operation middleware
 func (sh *strictHandler) GetVehicleCatalog(w http.ResponseWriter, r *http.Request) {
 	var request GetVehicleCatalogRequestObject
@@ -1992,57 +2373,62 @@ func (sh *strictHandler) GetVehicleCatalog(w http.ResponseWriter, r *http.Reques
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

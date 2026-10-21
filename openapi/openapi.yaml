@@ -303,6 +303,74 @@ paths:
           $ref: "#/components/responses/Problem"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  /v1/me/vehicle:
+    get:
+      operationId: getMyVehicle
+      summary: Returns the logged-in driver's vehicle.
+      description: >-
+        A driver who hasn't saved one gets a 404, and a rider a 403. A missing, invalid or
+        expired access token gets a 401.
+      responses:
+        "200":
+          description: The driver's vehicle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    put:
+      operationId: putMyVehicle
+      summary: Saves the logged-in driver's vehicle, replacing any they had.
+      description: >-
+        The make, model and colour must be spelt as /v1/vehicle-catalog has them. A plate
+        another driver has gets a 409, and a rider a 403. A missing, invalid or expired
+        access token gets a 401.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Vehicle"
+      responses:
+        "200":
+          description: The vehicle replaced the one the driver had.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+        "201":
+          description: The driver had no vehicle, and now has this one.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vehicle"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
   # Public, so a signup form can show it before the account exists.
   /v1/vehicle-catalog:
     get:
@@ -492,6 +560,23 @@ components:
         name:
           type: string
           description: Left out until the user sets one.
+    Vehicle:
+      type: object
+      required: [make, model, colour, plate]
+      properties:
+        make:
+          type: string
+        model:
+          type: string
+        colour:
+          type: string
+        # No pattern: Identity owns the rule.
+        plate:
+          type: string
+          description: >-
+            A Portuguese plate in any of its layouts, such as AA-00-AA or 00-AA-00, in any
+            case and with or without spaces and hyphens. It's stored and returned as
+            upper case with hyphens.
     VehicleCatalog:
       type: object
       required: [makes, colours]

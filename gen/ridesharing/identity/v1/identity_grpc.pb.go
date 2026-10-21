@@ -25,6 +25,7 @@ const (
 	IdentityService_Logout_FullMethodName               = "/ridesharing.identity.v1.IdentityService/Logout"
 	IdentityService_GetUser_FullMethodName              = "/ridesharing.identity.v1.IdentityService/GetUser"
 	IdentityService_UpdateUser_FullMethodName           = "/ridesharing.identity.v1.IdentityService/UpdateUser"
+	IdentityService_GetVehicleCatalog_FullMethodName    = "/ridesharing.identity.v1.IdentityService/GetVehicleCatalog"
 	IdentityService_RequestPasswordReset_FullMethodName = "/ridesharing.identity.v1.IdentityService/RequestPasswordReset"
 	IdentityService_ResetPassword_FullMethodName        = "/ridesharing.identity.v1.IdentityService/ResetPassword"
 )
@@ -64,6 +65,9 @@ type IdentityServiceClient interface {
 	// with INVALID_ARGUMENT for an ID that isn't a UUID or a name that breaks the rule,
 	// and NOT_FOUND when no user has the ID. Like GetUser, it doesn't check who's asking.
 	UpdateUser(ctx context.Context, in *UpdateUserRequest, opts ...grpc.CallOption) (*UpdateUserResponse, error)
+	// Returns the makes, models and colours a driver's vehicle can have, in the order a
+	// form lists them.
+	GetVehicleCatalog(ctx context.Context, in *GetVehicleCatalogRequest, opts ...grpc.CallOption) (*GetVehicleCatalogResponse, error)
 	// Emails the user a link to reset their password, if the email is registered. It
 	// succeeds either way, so the caller can't tell which emails are.
 	RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error)
@@ -142,6 +146,16 @@ func (c *identityServiceClient) UpdateUser(ctx context.Context, in *UpdateUserRe
 	return out, nil
 }
 
+func (c *identityServiceClient) GetVehicleCatalog(ctx context.Context, in *GetVehicleCatalogRequest, opts ...grpc.CallOption) (*GetVehicleCatalogResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetVehicleCatalogResponse)
+	err := c.cc.Invoke(ctx, IdentityService_GetVehicleCatalog_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *identityServiceClient) RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RequestPasswordResetResponse)
@@ -197,6 +211,9 @@ type IdentityServiceServer interface {
 	// with INVALID_ARGUMENT for an ID that isn't a UUID or a name that breaks the rule,
 	// and NOT_FOUND when no user has the ID. Like GetUser, it doesn't check who's asking.
 	UpdateUser(context.Context, *UpdateUserRequest) (*UpdateUserResponse, error)
+	// Returns the makes, models and colours a driver's vehicle can have, in the order a
+	// form lists them.
+	GetVehicleCatalog(context.Context, *GetVehicleCatalogRequest) (*GetVehicleCatalogResponse, error)
 	// Emails the user a link to reset their password, if the email is registered. It
 	// succeeds either way, so the caller can't tell which emails are.
 	RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error)
@@ -232,6 +249,9 @@ func (UnimplementedIdentityServiceServer) GetUser(context.Context, *GetUserReque
 }
 func (UnimplementedIdentityServiceServer) UpdateUser(context.Context, *UpdateUserRequest) (*UpdateUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateUser not implemented")
+}
+func (UnimplementedIdentityServiceServer) GetVehicleCatalog(context.Context, *GetVehicleCatalogRequest) (*GetVehicleCatalogResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetVehicleCatalog not implemented")
 }
 func (UnimplementedIdentityServiceServer) RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestPasswordReset not implemented")
@@ -368,6 +388,24 @@ func _IdentityService_UpdateUser_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_GetVehicleCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVehicleCatalogRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).GetVehicleCatalog(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_GetVehicleCatalog_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).GetVehicleCatalog(ctx, req.(*GetVehicleCatalogRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _IdentityService_RequestPasswordReset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RequestPasswordResetRequest)
 	if err := dec(in); err != nil {
@@ -434,6 +472,10 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateUser",
 			Handler:    _IdentityService_UpdateUser_Handler,
+		},
+		{
+			MethodName: "GetVehicleCatalog",
+			Handler:    _IdentityService_GetVehicleCatalog_Handler,
 		},
 		{
 			MethodName: "RequestPasswordReset",

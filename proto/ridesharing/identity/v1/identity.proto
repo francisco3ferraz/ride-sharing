@@ -34,6 +34,9 @@ service IdentityService {
   // with INVALID_ARGUMENT for an ID that isn't a UUID or a name that breaks the rule,
   // and NOT_FOUND when no user has the ID. Like GetUser, it doesn't check who's asking.
   rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  // Returns the makes, models and colours a driver's vehicle can have, in the order a
+  // form lists them.
+  rpc GetVehicleCatalog(GetVehicleCatalogRequest) returns (GetVehicleCatalogResponse);
   // Emails the user a link to reset their password, if the email is registered. It
   // succeeds either way, so the caller can't tell which emails are.
   rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
@@ -129,6 +132,19 @@ message UpdateUserRequest {
 
 message UpdateUserResponse {
   User user = 1;
+}
+
+// Names are matched exactly, so a form sends back the ones it was given.
+message VehicleMake {
+  string name = 1;
+  repeated string models = 2;
+}
+
+message GetVehicleCatalogRequest {}
+
+message GetVehicleCatalogResponse {
+  repeated VehicleMake makes = 1;
+  repeated string colours = 2;
 }
 
 message RequestPasswordResetRequest {

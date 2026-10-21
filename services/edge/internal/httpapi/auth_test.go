@@ -31,6 +31,7 @@ const (
 type fakeIdentity struct {
 	user                    *identityv1.User
 	tokens                  *identityv1.Tokens
+	catalog                 *identityv1.GetVehicleCatalogResponse
 	err                     error
 	gotRegister             *identityv1.RegisterRequest
 	gotLogin                *identityv1.LoginRequest
@@ -38,6 +39,7 @@ type fakeIdentity struct {
 	gotLogout               *identityv1.LogoutRequest
 	gotGetUser              *identityv1.GetUserRequest
 	gotUpdateUser           *identityv1.UpdateUserRequest
+	gotGetVehicleCatalog    *identityv1.GetVehicleCatalogRequest
 	gotRequestPasswordReset *identityv1.RequestPasswordResetRequest
 	gotResetPassword        *identityv1.ResetPasswordRequest
 }
@@ -88,6 +90,14 @@ func (f *fakeIdentity) UpdateUser(_ context.Context, req *identityv1.UpdateUserR
 		return nil, f.err
 	}
 	return &identityv1.UpdateUserResponse{User: f.user}, nil
+}
+
+func (f *fakeIdentity) GetVehicleCatalog(_ context.Context, req *identityv1.GetVehicleCatalogRequest, _ ...grpc.CallOption) (*identityv1.GetVehicleCatalogResponse, error) {
+	f.gotGetVehicleCatalog = req
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.catalog, nil
 }
 
 func (f *fakeIdentity) RequestPasswordReset(_ context.Context, req *identityv1.RequestPasswordResetRequest, _ ...grpc.CallOption) (*identityv1.RequestPasswordResetResponse, error) {

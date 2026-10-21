@@ -303,6 +303,28 @@ paths:
           $ref: "#/components/responses/Problem"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+  # Public, so a signup form can show it before the account exists.
+  /v1/vehicle-catalog:
+    get:
+      operationId: getVehicleCatalog
+      summary: Returns the makes, models and colours a driver's vehicle can have.
+      description: >-
+        In the order a form should list them. A vehicle's make, model and colour must be
+        spelt exactly as they are here.
+      security: []
+      responses:
+        "200":
+          description: The catalog.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VehicleCatalog"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
 components:
   headers:
@@ -472,3 +494,25 @@ components:
         name:
           type: string
           description: Left out until the user sets one.
+    VehicleCatalog:
+      type: object
+      required: [makes, colours]
+      properties:
+        makes:
+          type: array
+          items:
+            $ref: "#/components/schemas/VehicleMake"
+        colours:
+          type: array
+          items:
+            type: string
+    VehicleMake:
+      type: object
+      required: [name, models]
+      properties:
+        name:
+          type: string
+        models:
+          type: array
+          items:
+            type: string

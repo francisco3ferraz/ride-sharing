@@ -1,5 +1,5 @@
-// Package account registers and updates users, starts, refreshes and ends their sessions,
-// and resets their passwords. It knows nothing about gRPC.
+// Package account registers and updates users and their vehicles, starts, refreshes and
+// ends their sessions, and resets their passwords. It knows nothing about gRPC.
 package account
 
 import (
@@ -22,6 +22,7 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/db"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/password"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/refreshtoken"
+	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/vehicle"
 )
 
 // Role's values are the ones stored in users.role.
@@ -38,6 +39,13 @@ type User struct {
 	Name  string
 	Email string
 	Role  Role
+}
+
+type Vehicle struct {
+	Make   string
+	Model  string
+	Colour string
+	Plate  string
 }
 
 type Token struct {
@@ -65,6 +73,10 @@ var (
 	// ErrInvalidName is wrapped by the errors for a name that breaks the rule. The full
 	// message is written for the user.
 	ErrInvalidName = errors.New("invalid name")
+	ErrNotDriver   = errors.New("only drivers have a vehicle")
+	ErrPlateTaken  = errors.New("plate is already registered to another driver")
+	// Riders included.
+	ErrNoVehicle = errors.New("no vehicle saved yet")
 )
 
 const maxNameRunes = 50
@@ -406,6 +418,49 @@ func cleanName(name string) (string, error) {
 		return "", fmt.Errorf("%w: must not contain control characters", ErrInvalidName)
 	}
 	return name, nil
+}
+
+// PutVehicle creates or replaces the driver's vehicle, with its plate in canonical form,
+// and reports whether it created it.
+func (s *Service) PutVehicle(ctx context.Context, userID uuid.UUID, v Vehicle) (Vehicle, bool, error) {
+	user, err := s.GetUser(ctx, userID)
+	if err != nil {
+		return Vehicle{}, false, err
+	}
+	// Reading the role before writing is safe only because a role never changes.
+	if user.Role != RoleDriver {
+		return Vehicle{}, false, ErrNotDriver
+	}
+	// Unwrapped below: their messages are shown to the user.
+	if err := vehicle.CheckCatalog(v.Make, v.Model, v.Colour); err != nil {
+		return Vehicle{}, false, err
+	}
+	if v.Plate, err = vehicle.CleanPlate(v.Plate); err != nil {
+		return Vehicle{}, false, err
+	}
+
+	created, err := s.queries.PutVehicle(ctx, db.PutVehicleParams{
+		UserID: userID, Make: v.Make, Model: v.Model, Colour: v.Colour, Plate: v.Plate,
+	})
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation && pgErr.ConstraintName == "vehicles_plate_key" {
+		return Vehicle{}, false, ErrPlateTaken
+	}
+	if err != nil {
+		return Vehicle{}, false, fmt.Errorf("put vehicle: %w", err)
+	}
+	return v, created, nil
+}
+
+func (s *Service) GetVehicle(ctx context.Context, userID uuid.UUID) (Vehicle, error) {
+	row, err := s.queries.GetVehicleByUserID(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Vehicle{}, ErrNoVehicle
+	}
+	if err != nil {
+		return Vehicle{}, fmt.Errorf("get vehicle: %w", err)
+	}
+	return Vehicle{Make: row.Make, Model: row.Model, Colour: row.Colour, Plate: row.Plate}, nil
 }
 
 // inTx runs fn in a transaction. fn must make every query through q: s.queries runs on

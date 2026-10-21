@@ -27,6 +27,7 @@ import (
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/db"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/password"
 	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/refreshtoken"
+	"github.com/francisco3ferraz/ride-sharing/services/identity/internal/vehicle"
 )
 
 const testPassword = "a long enough password"
@@ -342,6 +343,72 @@ func TestService(t *testing.T) {
 		got, err := svc.GetUser(ctx, registered.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "Wanda", got.Name)
+	})
+
+	t.Run("put a vehicle, then replace it, keeping the plate", func(t *testing.T) {
+		driver, _, err := svc.Register(ctx, "rui@example.pt", testPassword, RoleDriver)
+		require.NoError(t, err)
+
+		saved, created, err := svc.PutVehicle(ctx, driver.ID, Vehicle{Make: "Toyota", Model: "Corolla", Colour: "White", Plate: "aa 01 bc"})
+		require.NoError(t, err)
+		assert.True(t, created)
+		assert.Equal(t, Vehicle{Make: "Toyota", Model: "Corolla", Colour: "White", Plate: "AA-01-BC"}, saved)
+
+		saved, created, err = svc.PutVehicle(ctx, driver.ID, Vehicle{Make: "Toyota", Model: "Corolla", Colour: "Grey", Plate: "AA01BC"})
+		require.NoError(t, err)
+		assert.False(t, created)
+
+		got, err := svc.GetVehicle(ctx, driver.ID)
+		require.NoError(t, err)
+		assert.Equal(t, saved, got)
+		assert.Equal(t, "Grey", got.Colour)
+	})
+
+	t.Run("a plate another driver has, in another spelling", func(t *testing.T) {
+		first, _, err := svc.Register(ctx, "sofia@example.pt", testPassword, RoleDriver)
+		require.NoError(t, err)
+		second, _, err := svc.Register(ctx, "teresa@example.pt", testPassword, RoleDriver)
+		require.NoError(t, err)
+		_, _, err = svc.PutVehicle(ctx, first.ID, Vehicle{Make: "Kia", Model: "Niro", Colour: "Blue", Plate: "12-AB-34"})
+		require.NoError(t, err)
+
+		_, _, err = svc.PutVehicle(ctx, second.ID, Vehicle{Make: "Tesla", Model: "Model 3", Colour: "Red", Plate: "12ab34"})
+		require.ErrorIs(t, err, ErrPlateTaken)
+
+		_, err = svc.GetVehicle(ctx, second.ID)
+		assert.ErrorIs(t, err, ErrNoVehicle)
+	})
+
+	t.Run("a rider has no vehicle", func(t *testing.T) {
+		rider, _, err := svc.Register(ctx, "vitor@example.pt", testPassword, RoleRider)
+		require.NoError(t, err)
+
+		_, _, err = svc.PutVehicle(ctx, rider.ID, Vehicle{Make: "Kia", Model: "Niro", Colour: "Blue", Plate: "56-CD-78"})
+		require.ErrorIs(t, err, ErrNotDriver)
+
+		_, err = svc.GetVehicle(ctx, rider.ID)
+		assert.ErrorIs(t, err, ErrNoVehicle)
+	})
+
+	t.Run("vehicle details that break the rules leave the old ones", func(t *testing.T) {
+		driver, _, err := svc.Register(ctx, "hugo@example.pt", testPassword, RoleDriver)
+		require.NoError(t, err)
+		saved, _, err := svc.PutVehicle(ctx, driver.ID, Vehicle{Make: "Dacia", Model: "Logan", Colour: "Silver", Plate: "AB-12-34"})
+		require.NoError(t, err)
+
+		_, _, err = svc.PutVehicle(ctx, driver.ID, Vehicle{Make: "Dacia", Model: "Corolla", Colour: "Silver", Plate: "AB-12-34"})
+		require.ErrorIs(t, err, vehicle.ErrInvalid)
+		_, _, err = svc.PutVehicle(ctx, driver.ID, Vehicle{Make: "Dacia", Model: "Logan", Colour: "Silver", Plate: "AB-CD-EF"})
+		require.ErrorIs(t, err, vehicle.ErrInvalid)
+
+		got, err := svc.GetVehicle(ctx, driver.ID)
+		require.NoError(t, err)
+		assert.Equal(t, saved, got)
+	})
+
+	t.Run("put a vehicle for an unknown user", func(t *testing.T) {
+		_, _, err := svc.PutVehicle(ctx, uuid.New(), Vehicle{Make: "Kia", Model: "Niro", Colour: "Blue", Plate: "90-EF-12"})
+		assert.ErrorIs(t, err, ErrUserNotFound)
 	})
 
 	t.Run("update an unknown user", func(t *testing.T) {

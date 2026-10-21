@@ -51,6 +51,8 @@ The browser only ever talks to the Edge, through Traefik. The Edge holds no busi
 
 **Identity turns password hashes away rather than queue them for too long.** Registration, login and password reset each hash a password with argon2id, which takes 19 MiB and tens of milliseconds, so Identity hashes four at a time and lets 16 more wait. It turns any more away at once, and the Edge answers 503: a longer queue would spend every hash on a request about to time out. A service the Edge can't reach gets the same 503, with the same fixed message.
 
+**Driver-only routes check the role twice.** The Edge answers a rider with a 403 before calling anything, and Identity, which owns the role, checks its own record again, so a call that skips the Edge is refused too. A driver's vehicle is picked from a fixed catalog of makes, models and colours that Identity serves at `/v1/vehicle-catalog`, and its Portuguese plate is stored in one canonical form, so each plate belongs to one driver.
+
 **The REST API is spec-first.** [`openapi/openapi.yaml`](openapi/openapi.yaml) is the contract. The Edge's handler interfaces are generated from it with [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen), every request is validated against it before a handler runs, and Redocly lints it in CI.
 
 **Each service owns its data.** Postgres runs in the cluster under the [CloudNativePG](https://cloudnative-pg.io/) operator, with one database and one role per service, so no service can read another's tables. Valkey likewise gives each service its own user, limited to its own keys, and keeps nothing that can't be lost. A service's schema migrations are compiled into its binary and applied by an init container before the pod starts.
